@@ -1,0 +1,24 @@
+# Kuavo SLAM GUI 依赖包
+# Python 3.8+
+
+# ==================== 核心依赖 ====================
+# GUI框架
+PyQt5>=5.15.0
+
+# ROS相关
+# 注意: rospy等ROS依赖需要通过apt安装，无法通过pip安装
+# sudo apt install ros-noetic-rospy ros-noetic-std-msgs
+
+# ==================== ARM架构说明 ====================
+# 对于ARM架构（如Jetson），PyQt5使用系统包：
+# sudo apt install python3-pyqt5 python3-pyqt5.qtsvg
+# 然后创建软链接到conda环境（已在install_dependencies.sh中自动处理）
+
+# ==================== 可选依赖 ====================
+# 如需图表显示功能
+# matplotlib>=3.3.0
+# numpy>=1.19.0
+
+# 如需日志功能
+# loguru>=0.6.0
+

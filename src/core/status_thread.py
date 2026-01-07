@@ -22,7 +22,7 @@ class StatusUpdateThread(QThread):
         
     def run(self):
         """线程主循环"""
-        from kuavo_slam.srv import GetSlamStatus, GetSlamStatusRequest
+        from slam_controller.srv import GetSlamStatus, GetSlamStatusRequest
         
         rate = rospy.Rate(config.STATUS_UPDATE_RATE)
         

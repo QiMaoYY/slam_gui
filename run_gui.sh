@@ -12,7 +12,7 @@
 
 # 获取脚本所在目录
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-GUI_SCRIPT="${SCRIPT_DIR}/slam_gui.py"
+GUI_SCRIPT="${SCRIPT_DIR}/slam_gui_main.py"
 
 # 颜色定义
 RED='\033[0;31m'

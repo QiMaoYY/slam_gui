@@ -33,7 +33,7 @@ class ROSServiceManager:
         Returns:
             bool: 是否成功
         """
-        from kuavo_slam.srv import StartMapping, StartMappingRequest
+        from slam_controller.srv import StartMapping, StartMappingRequest
         
         try:
             # 等待服务可用
@@ -72,14 +72,18 @@ class ROSServiceManager:
             )
             return False
     
-    def stop_mapping(self):
+    def stop_mapping(self, save_map=False, map_name=""):
         """
         停止建图
+        
+        Args:
+            save_map: 是否保存地图
+            map_name: 地图名称（仅当save_map=True时有效）
         
         Returns:
             bool: 是否成功
         """
-        from kuavo_slam.srv import StopMapping, StopMappingRequest
+        from slam_controller.srv import StopMapping, StopMappingRequest
         
         try:
             # 等待服务可用
@@ -94,6 +98,8 @@ class ROSServiceManager:
             
             # 调用服务
             req = StopMappingRequest()
+            req.save_map = save_map
+            req.map_name = map_name
             resp = stop_mapping(req)
             
             if not resp.success:

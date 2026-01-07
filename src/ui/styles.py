@@ -187,8 +187,40 @@ class DarkTheme:
             color: #6c7086;
         }
         
-        /* 停止建图按钮 */
-        #stopMappingBtn {
+        /* 保存地图按钮 */
+        #saveMapBtn {
+            background: qlineargradient(
+                x1:0, y1:0, x2:0, y2:1,
+                stop:0 #a6e3a1,
+                stop:1 #94e2d5
+            );
+            color: #1e1e2e;
+            border: none;
+        }
+        
+        #saveMapBtn:hover {
+            background: qlineargradient(
+                x1:0, y1:0, x2:0, y2:1,
+                stop:0 #94e2d5,
+                stop:1 #89dceb
+            );
+        }
+        
+        #saveMapBtn:pressed {
+            background: qlineargradient(
+                x1:0, y1:0, x2:0, y2:1,
+                stop:0 #89dceb,
+                stop:1 #a6e3a1
+            );
+        }
+        
+        #saveMapBtn:disabled {
+            background-color: #313244;
+            color: #6c7086;
+        }
+        
+        /* 终止建图按钮 */
+        #abortMappingBtn {
             background: qlineargradient(
                 x1:0, y1:0, x2:0, y2:1,
                 stop:0 #f38ba8,
@@ -198,7 +230,7 @@ class DarkTheme:
             border: none;
         }
         
-        #stopMappingBtn:hover {
+        #abortMappingBtn:hover {
             background: qlineargradient(
                 x1:0, y1:0, x2:0, y2:1,
                 stop:0 #eba0ac,
@@ -206,7 +238,7 @@ class DarkTheme:
             );
         }
         
-        #stopMappingBtn:pressed {
+        #abortMappingBtn:pressed {
             background: qlineargradient(
                 x1:0, y1:0, x2:0, y2:1,
                 stop:0 #f5c2e7,
@@ -214,7 +246,7 @@ class DarkTheme:
             );
         }
         
-        #stopMappingBtn:disabled {
+        #abortMappingBtn:disabled {
             background-color: #313244;
             color: #6c7086;
         }
@@ -295,6 +327,42 @@ class DarkTheme:
         QMessageBox QLabel {
             color: #cdd6f4;
             font-size: 14px;
+        }
+        QPushButton {
+            background-color: #45475a;
+            color: #cdd6f4;
+            border: 2px solid #585b70;
+            border-radius: 5px;
+            padding: 8px 20px;
+            font-size: 13px;
+        }
+        QPushButton:hover {
+            background-color: #585b70;
+        }
+        """
+    
+    @staticmethod
+    def get_inputdialog_style():
+        """获取输入对话框样式"""
+        return """
+        QInputDialog {
+            background-color: #1e1e2e;
+            color: #cdd6f4;
+        }
+        QInputDialog QLabel {
+            color: #cdd6f4;
+            font-size: 14px;
+        }
+        QLineEdit {
+            background-color: #313244;
+            color: #cdd6f4;
+            border: 2px solid #45475a;
+            border-radius: 5px;
+            padding: 8px;
+            font-size: 14px;
+        }
+        QLineEdit:focus {
+            border-color: #89b4fa;
         }
         QPushButton {
             background-color: #45475a;

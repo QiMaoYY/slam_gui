@@ -38,6 +38,7 @@ Thumbs.db
 *.log
 *.tmp
 /tmp/
+*.bak
 
 # PID文件
 *.pid

@@ -5,10 +5,12 @@
 SLAM系统控制界面
 """
 
+import re
 import rospy
 from PyQt5.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-    QPushButton, QLabel, QFrame, QCheckBox, QMessageBox, QGroupBox
+    QPushButton, QLabel, QFrame, QCheckBox, QMessageBox, QGroupBox,
+    QInputDialog, QLineEdit
 )
 from PyQt5.QtCore import Qt
 
@@ -140,7 +142,7 @@ class SlamMainWindow(QMainWindow):
     
     def create_mapping_group(self) -> QGroupBox:
         """创建建图控制组"""
-        group = QGroupBox('建图控制')
+        group = QGroupBox('建图管理')
         group.setObjectName('mappingGroup')
         
         layout = QVBoxLayout()
@@ -154,7 +156,7 @@ class SlamMainWindow(QMainWindow):
         
         # 按钮布局
         button_layout = QHBoxLayout()
-        button_layout.setSpacing(20)
+        button_layout.setSpacing(15)
         
         # 开始建图按钮
         self.start_mapping_btn = QPushButton('🚀 开始建图')
@@ -163,13 +165,21 @@ class SlamMainWindow(QMainWindow):
         self.start_mapping_btn.clicked.connect(self.on_start_mapping)
         button_layout.addWidget(self.start_mapping_btn)
         
-        # 停止建图按钮
-        self.stop_mapping_btn = QPushButton('⏹ 停止建图')
-        self.stop_mapping_btn.setObjectName('stopMappingBtn')
-        self.stop_mapping_btn.setMinimumHeight(config.BUTTON_HEIGHT_LARGE)
-        self.stop_mapping_btn.setEnabled(False)
-        self.stop_mapping_btn.clicked.connect(self.on_stop_mapping)
-        button_layout.addWidget(self.stop_mapping_btn)
+        # 保存地图按钮
+        self.save_map_btn = QPushButton('💾 保存地图')
+        self.save_map_btn.setObjectName('saveMapBtn')
+        self.save_map_btn.setMinimumHeight(config.BUTTON_HEIGHT_LARGE)
+        self.save_map_btn.setEnabled(False)
+        self.save_map_btn.clicked.connect(self.on_save_map)
+        button_layout.addWidget(self.save_map_btn)
+        
+        # 终止建图按钮
+        self.abort_mapping_btn = QPushButton('⏹ 终止建图')
+        self.abort_mapping_btn.setObjectName('abortMappingBtn')
+        self.abort_mapping_btn.setMinimumHeight(config.BUTTON_HEIGHT_LARGE)
+        self.abort_mapping_btn.setEnabled(False)
+        self.abort_mapping_btn.clicked.connect(self.on_abort_mapping)
+        button_layout.addWidget(self.abort_mapping_btn)
         
         layout.addLayout(button_layout)
         
@@ -245,25 +255,29 @@ class SlamMainWindow(QMainWindow):
         """根据系统状态更新按钮可用性"""
         if status == 'idle':
             self.start_mapping_btn.setEnabled(True)
-            self.stop_mapping_btn.setEnabled(False)
+            self.save_map_btn.setEnabled(False)
+            self.abort_mapping_btn.setEnabled(False)
             self.calib_checkbox.setEnabled(True)
             self.start_server_btn.setEnabled(False)
             self.stop_server_btn.setEnabled(True)
         elif status == 'mapping':
             self.start_mapping_btn.setEnabled(False)
-            self.stop_mapping_btn.setEnabled(True)
+            self.save_map_btn.setEnabled(True)
+            self.abort_mapping_btn.setEnabled(True)
             self.calib_checkbox.setEnabled(False)
             self.start_server_btn.setEnabled(False)
             self.stop_server_btn.setEnabled(True)
         elif status in ['localizing', 'navigating']:
             self.start_mapping_btn.setEnabled(False)
-            self.stop_mapping_btn.setEnabled(False)
+            self.save_map_btn.setEnabled(False)
+            self.abort_mapping_btn.setEnabled(False)
             self.calib_checkbox.setEnabled(False)
             self.start_server_btn.setEnabled(False)
             self.stop_server_btn.setEnabled(True)
         else:  # error or disconnected
             self.start_mapping_btn.setEnabled(False)
-            self.stop_mapping_btn.setEnabled(False)
+            self.save_map_btn.setEnabled(False)
+            self.abort_mapping_btn.setEnabled(False)
             self.calib_checkbox.setEnabled(False)
             self.start_server_btn.setEnabled(True)
             self.stop_server_btn.setEnabled(False)
@@ -273,19 +287,75 @@ class SlamMainWindow(QMainWindow):
         need_calibration = self.calib_checkbox.isChecked()
         self.ros_manager.start_mapping(need_calibration)
     
-    def on_stop_mapping(self):
-        """停止建图按钮点击事件"""
+    def on_save_map(self):
+        """保存地图按钮点击事件"""
+        # 创建输入对话框并应用暗色主题
+        dialog = QInputDialog(self)
+        dialog.setWindowTitle('保存地图')
+        dialog.setLabelText(
+            '请输入地图名称:\n\n'
+            '规则：\n'
+            '- 只能包含字母、数字、下划线(_)、横线(-)\n'
+            '- 长度不超过50个字符\n'
+            '- 不能为空'
+        )
+        dialog.setTextValue('')
+        dialog.setStyleSheet(DarkTheme.get_inputdialog_style())
+        
+        ok = dialog.exec_()
+        map_name = dialog.textValue()
+        
+        if not ok:
+            return
+        
+        # 验证地图名
+        map_name = map_name.strip()
+        
+        if not map_name:
+            self.show_message('错误', '地图名称不能为空', QMessageBox.Warning)
+            return
+        
+        if len(map_name) > 50:
+            self.show_message('错误', '地图名称长度不能超过50个字符', QMessageBox.Warning)
+            return
+        
+        if not re.match(r'^[a-zA-Z0-9_-]+$', map_name):
+            self.show_message(
+                '错误', 
+                '地图名称只能包含字母、数字、下划线(_)、横线(-)\n'
+                f'您输入的名称包含非法字符: {map_name}',
+                QMessageBox.Warning
+            )
+            return
+        
+        # 确认保存
+        reply = QMessageBox.question(
+            self,
+            '确认保存',
+            f'确定要停止建图并保存为 "{map_name}" 吗？\n\n'
+            f'地图将保存到:\nkuavo_slam/maps/{map_name}/',
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.Yes
+        )
+        
+        if reply == QMessageBox.Yes:
+            self.ros_manager.stop_mapping(save_map=True, map_name=map_name)
+    
+    def on_abort_mapping(self):
+        """终止建图按钮点击事件（不保存地图）"""
         # 确认对话框
         reply = QMessageBox.question(
             self,
-            '确认停止',
-            '确定要停止建图吗？\n地图将被保存到指定位置。',
+            '确认终止',
+            '确定要终止建图吗？\n\n'
+            '⚠️ 警告：地图将不会被保存！\n'
+            '如需保存地图，请点击"保存地图"按钮。',
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.No
         )
         
         if reply == QMessageBox.Yes:
-            self.ros_manager.stop_mapping()
+            self.ros_manager.stop_mapping(save_map=False, map_name="")
     
     def on_start_server(self):
         """启动服务端按钮点击事件"""

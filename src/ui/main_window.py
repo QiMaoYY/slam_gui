@@ -222,14 +222,20 @@ class SlamMainWindow(QMainWindow):
         self.status_indicator.setText(status_text)
         
         # 设置状态颜色
-        color = config.STATUS_COLORS.get(status, '#757575')
+        color = config.STATUS_COLORS.get(status, '#607d8b')
         self.status_indicator.setStyleSheet(f"""
-            background-color: {color};
-            color: #1e1e2e;
-            border-radius: 8px;
-            padding: 8px 16px;
-            font-weight: bold;
-            font-size: 15px;
+            background: qlineargradient(
+                x1:0, y1:0, x2:1, y2:0,
+                stop:0 rgba({self._hex_to_rgb(color)}, 0.6),
+                stop:1 rgba({self._hex_to_rgb(color)}, 0.8)
+            );
+            color: #ffffff;
+            border: 1px solid rgba({self._hex_to_rgb(color)}, 0.9);
+            border-radius: 10px;
+            padding: 10px 20px;
+            font-weight: 600;
+            font-size: 14px;
+            letter-spacing: 1px;
         """)
         
         # 更新消息
@@ -384,6 +390,14 @@ class SlamMainWindow(QMainWindow):
         msg_box.setStandardButtons(QMessageBox.Ok)
         msg_box.setStyleSheet(DarkTheme.get_messagebox_style())
         msg_box.exec_()
+    
+    def _hex_to_rgb(self, hex_color):
+        """将十六进制颜色转换为RGB字符串"""
+        hex_color = hex_color.lstrip('#')
+        r = int(hex_color[0:2], 16)
+        g = int(hex_color[2:4], 16)
+        b = int(hex_color[4:6], 16)
+        return f"{r}, {g}, {b}"
     
     def closeEvent(self, event):
         """窗口关闭事件"""

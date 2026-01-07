@@ -18,7 +18,7 @@ class Config:
     # 脚本路径
     SLAM_MANAGER_SCRIPT = os.path.join(
         SLAM_WS, 
-        "src/kuavo_slam/scripts/run_slam_manager.sh"
+        "src/slam_controller/scripts/run_slam_manager.sh"
     )
     
     # PID 文件路径
@@ -51,14 +51,14 @@ class Config:
     BUTTON_HEIGHT_MEDIUM = 50  # 服务端按钮
     
     # ==================== 状态配置 ====================
-    # 状态颜色映射
+    # 状态颜色映射（科技风格）
     STATUS_COLORS = {
-        'idle': '#4CAF50',          # 绿色 - 空闲
-        'mapping': '#2196F3',       # 蓝色 - 建图中
-        'localizing': '#FF9800',    # 橙色 - 定位中
-        'navigating': '#9C27B0',    # 紫色 - 导航中
-        'error': '#F44336',         # 红色 - 错误
-        'disconnected': '#757575'   # 灰色 - 断开连接
+        'idle': '#00e676',          # 霓虹绿 - 空闲
+        'mapping': '#00d4ff',       # 霓虹蓝 - 建图中
+        'localizing': '#ffa726',    # 橙色 - 定位中
+        'navigating': '#ab47bc',    # 紫色 - 导航中
+        'error': '#ff5252',         # 红色 - 错误
+        'disconnected': '#607d8b'   # 灰色 - 断开连接
     }
     
     # 状态文本映射

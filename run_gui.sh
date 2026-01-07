@@ -52,30 +52,27 @@ main() {
     
     # 检查conda环境
     print_info "检查Python环境..."
-    if [[ -z "${CONDA_DEFAULT_ENV}" ]]; then
-        print_warning "未检测到conda环境"
-        print_info "尝试激活 demo 环境..."
-        
-        # 尝试初始化conda
-        if [[ -f "${HOME}/miniconda3/etc/profile.d/conda.sh" ]]; then
-            source "${HOME}/miniconda3/etc/profile.d/conda.sh"
-        elif [[ -f "${HOME}/anaconda3/etc/profile.d/conda.sh" ]]; then
-            source "${HOME}/anaconda3/etc/profile.d/conda.sh"
-        elif [[ -f "/opt/conda/etc/profile.d/conda.sh" ]]; then
-            source "/opt/conda/etc/profile.d/conda.sh"
-        else
-            print_error "无法找到conda初始化脚本"
-            print_info "请手动激活环境: conda activate demo"
-            exit 1
-        fi
-        
-        # 激活demo环境
-        conda activate demo
-        if [[ $? -ne 0 ]]; then
-            print_error "无法激活conda环境: demo"
-            print_info "请手动运行: conda activate demo"
-            exit 1
-        fi
+    print_info "激活 demo 环境..."
+    
+    # 尝试初始化conda
+    if [[ -f "${HOME}/miniconda3/etc/profile.d/conda.sh" ]]; then
+        source "${HOME}/miniconda3/etc/profile.d/conda.sh"
+    elif [[ -f "${HOME}/anaconda3/etc/profile.d/conda.sh" ]]; then
+        source "${HOME}/anaconda3/etc/profile.d/conda.sh"
+    elif [[ -f "/opt/conda/etc/profile.d/conda.sh" ]]; then
+        source "/opt/conda/etc/profile.d/conda.sh"
+    else
+        print_error "无法找到conda初始化脚本"
+        print_info "请手动激活环境: conda activate demo"
+        exit 1
+    fi
+    
+    # 激活demo环境
+    conda activate demo
+    if [[ $? -ne 0 ]]; then
+        print_error "无法激活conda环境: demo"
+        print_info "请手动运行: conda activate demo"
+        exit 1
     fi
     
     print_success "Python环境: ${CONDA_DEFAULT_ENV}"
@@ -85,6 +82,9 @@ main() {
     print_info "Python版本: ${PYTHON_VERSION}"
     
     # 检查ROS环境
+    export ROS_MASTER_URI=http://kuavo_master:11311
+    export ROS_IP=192.168.26.12
+    source /media/data/slam_ws/devel/setup.bash
     print_info "检查ROS环境..."
     if [[ -z "${ROS_MASTER_URI}" ]]; then
         print_warning "未检测到ROS环境变量"

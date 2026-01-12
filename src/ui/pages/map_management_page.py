@@ -9,9 +9,12 @@
 from __future__ import annotations
 
 import re
-from typing import Callable, Optional
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Dict, Optional
 
 from PyQt5.QtCore import Qt
+from PyQt5.QtGui import QPixmap
 from PyQt5.QtWidgets import (
     QWidget,
     QVBoxLayout,
@@ -29,10 +32,35 @@ from ...core.ros_manager import ROSServiceManager
 from ..styles import DarkTheme
 
 
+def _format_created_at(s: str) -> str:
+    # YYYYMMDD_HHMMSS -> YYYY-MM-DD HH:MM:SS
+    if not s:
+        return "--"
+    try:
+        if "_" in s:
+            d, t = s.split("_", 1)
+        else:
+            d, t = s[:8], s[8:]
+        if len(d) == 8 and len(t) >= 6:
+            return f"{d[0:4]}-{d[4:6]}-{d[6:8]} {t[0:2]}:{t[2:4]}:{t[4:6]}"
+        return s
+    except Exception:
+        return s
+
+
+def _bytes_to_mb_str(b: int) -> str:
+    try:
+        mb = float(b) / (1024.0 * 1024.0)
+        return f"{mb:.2f} MB"
+    except Exception:
+        return "0.00 MB"
+
+
 class MapManagementPage(QWidget):
     def __init__(self, ros_manager: ROSServiceManager, parent=None):
         super().__init__(parent)
         self._ros = ros_manager
+        self._maps: Dict[str, object] = {}
 
         self._calib = QCheckBox("启用雷达校准（首次建图推荐）")
         self._calib.setChecked(True)
@@ -52,6 +80,22 @@ class MapManagementPage(QWidget):
         self._btn_view2d = QPushButton("查看2D地图")
         self._btn_edit2d = QPushButton("编辑2D地图")
         self._btn_delete = QPushButton("删除该地图")
+
+        # 地图详情（选择后显示）
+        self._lbl_created = QLabel("--")
+        self._lbl_created.setObjectName("valueBox")
+        self._lbl_ori_size = QLabel("--")
+        self._lbl_ori_size.setObjectName("valueBox")
+        self._lbl_nav_size = QLabel("--")
+        self._lbl_nav_size.setObjectName("valueBox")
+
+        self._preview = QLabel("无2d预览图")
+        self._preview.setObjectName("muted")
+        self._preview.setAlignment(Qt.AlignCenter)
+        self._preview.setFixedSize(320, 180)
+        self._preview.setStyleSheet(
+            "background-color:#0b0e14;border:1px solid rgba(120,140,170,0.18);border-radius:10px;"
+        )
 
         self._build_ui()
         self._wire()
@@ -115,17 +159,47 @@ class MapManagementPage(QWidget):
         action_row.addStretch()
         edit_layout.addLayout(action_row)
 
+        # 详情区：时间/大小 + 2D缩略图
+        detail_row = QHBoxLayout()
+        detail_row.setSpacing(18)
+
+        left = QVBoxLayout()
+        left.setSpacing(10)
+        left.addLayout(self._kv("创建时间", self._lbl_created))
+        left.addLayout(self._kv("原始点云大小", self._lbl_ori_size))
+        left.addLayout(self._kv("导航点云大小", self._lbl_nav_size))
+        left.addStretch()
+
+        detail_row.addLayout(left, 1)
+
+        right = QVBoxLayout()
+        right.setSpacing(6)
+        t = QLabel("2D预览")
+        t.setObjectName("muted")
+        right.addWidget(t)
+        right.addWidget(self._preview, 0, Qt.AlignLeft)
+        right.addStretch()
+
+        detail_row.addLayout(right, 0)
+
+        edit_layout.addLayout(detail_row)
+
         root.addWidget(edit_card)
         root.addStretch()
 
         # 先禁用未实现功能按钮（后续你安排再接）
-        for b in (self._btn_refresh, self._btn_gen2d, self._btn_view2d, self._btn_edit2d, self._btn_delete):
-            b.setEnabled(False)
+        self._btn_refresh.setEnabled(True)
+        self._btn_gen2d.setEnabled(False)   # 预留
+        self._btn_delete.setEnabled(False)  # 预留
+        self._btn_view2d.setEnabled(False)  # 由nav_ready控制
+        self._btn_edit2d.setEnabled(False)  # 由nav_ready控制
 
     def _wire(self):
         self._btn_start.clicked.connect(self._on_start_mapping)
         self._btn_save.clicked.connect(self._on_save_map)
         self._btn_abort.clicked.connect(self._on_abort_mapping)
+        self._btn_refresh.clicked.connect(self.refresh_map_list)
+        self._combo_maps.currentIndexChanged.connect(self._on_map_selected)
 
     def _on_start_mapping(self):
         need_calibration = self._calib.isChecked()
@@ -180,6 +254,84 @@ class MapManagementPage(QWidget):
         )
         if reply == QMessageBox.Yes:
             self._ros.stop_mapping(save_map=False, map_name="")
+
+    @staticmethod
+    def _kv(k: str, v_label: QLabel):
+        k_label = QLabel(k)
+        k_label.setObjectName("muted")
+        col = QVBoxLayout()
+        col.setSpacing(4)
+        col.addWidget(k_label)
+        col.addWidget(v_label)
+        return col
+
+    def refresh_map_list(self):
+        entries = self._ros.list_maps()
+        if entries is None:
+            return
+
+        self._maps.clear()
+        self._combo_maps.blockSignals(True)
+        self._combo_maps.clear()
+
+        for e in entries:
+            self._maps[e.name] = e
+            self._combo_maps.addItem(e.name)
+
+        self._combo_maps.blockSignals(False)
+
+        if self._combo_maps.count() > 0:
+            self._combo_maps.setCurrentIndex(0)
+            self._on_map_selected(0)
+        else:
+            self._set_map_detail_none()
+
+    def _set_map_detail_none(self):
+        self._lbl_created.setText("--")
+        self._lbl_ori_size.setText("--")
+        self._lbl_nav_size.setText("--")
+        self._preview.setText("无2d预览图")
+        self._preview.setPixmap(QPixmap())
+        self._btn_view2d.setEnabled(False)
+        self._btn_edit2d.setEnabled(False)
+
+    def _on_map_selected(self, idx: int):
+        name = self._combo_maps.currentText().strip()
+        if not name or name not in self._maps:
+            self._set_map_detail_none()
+            return
+
+        e = self._maps[name]
+        created = _format_created_at(getattr(e, "created_at", "") or "")
+        ori_mb = _bytes_to_mb_str(int(getattr(e, "ori_pointcloud_bytes", 0) or 0))
+        nav_ready = bool(getattr(e, "nav_ready", False))
+        nav_bytes = int(getattr(e, "nav_pointcloud_bytes", 0) or 0) if nav_ready else 0
+        nav_mb = _bytes_to_mb_str(nav_bytes)
+
+        self._lbl_created.setText(created)
+        self._lbl_ori_size.setText(ori_mb)
+        self._lbl_nav_size.setText(nav_mb)
+
+        # 2D缩略图：map_path/sketch.png
+        map_path = str(getattr(e, "path", "") or "")
+        sketch = Path(map_path) / "sketch.png"
+
+        if nav_ready and sketch.exists():
+            pix = QPixmap(str(sketch))
+            if not pix.isNull():
+                scaled = pix.scaled(self._preview.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation)
+                self._preview.setPixmap(scaled)
+                self._preview.setText("")
+            else:
+                self._preview.setText("无2d预览图")
+                self._preview.setPixmap(QPixmap())
+        else:
+            self._preview.setText("无2d预览图")
+            self._preview.setPixmap(QPixmap())
+
+        # 可导航地图才允许查看/编辑2D
+        self._btn_view2d.setEnabled(nav_ready)
+        self._btn_edit2d.setEnabled(nav_ready)
 
     def set_mapping_state(self, slam_status: str):
         """

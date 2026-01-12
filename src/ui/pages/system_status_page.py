@@ -128,7 +128,7 @@ class SystemStatusPage(QWidget):
 
     @staticmethod
     def _kv(k: str, v_label: QLabel):
-        v_label.setObjectName("statusItemStrong")
+        v_label.setObjectName("valueBox")
         k_label = QLabel(k)
         k_label.setObjectName("muted")
         col = QVBoxLayout()

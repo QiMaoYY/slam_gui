@@ -5,10 +5,25 @@ ROS服务管理器
 封装所有ROS服务调用
 """
 
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import List, Optional
+
 import rospy
 from PyQt5.QtWidgets import QMessageBox
 
 from ..config.settings import config
+
+
+@dataclass
+class MapEntry:
+    name: str
+    nav_ready: bool
+    path: str
+    created_at: str
+    ori_pointcloud_bytes: int
+    nav_pointcloud_bytes: int
 
 
 class ROSServiceManager:
@@ -128,4 +143,51 @@ class ROSServiceManager:
             self.parent.show_message(title, message, icon)
         else:
             rospy.logerr(f"[ROSServiceManager] {title}: {message}")
+
+    def list_maps(self) -> Optional[List[MapEntry]]:
+        """
+        获取地图列表（/slam_manager/list_maps）
+
+        Returns:
+            List[MapEntry] or None
+        """
+        from slam_controller.srv import ListMaps, ListMapsRequest
+
+        try:
+            rospy.wait_for_service(config.SERVICE_LIST_MAPS, timeout=config.SERVICE_TIMEOUT)
+            srv = rospy.ServiceProxy(config.SERVICE_LIST_MAPS, ListMaps)
+            resp = srv(ListMapsRequest())
+
+            if not getattr(resp, "success", False):
+                self._show_error("失败", getattr(resp, "message", "获取地图列表失败"), QMessageBox.Warning)
+                return None
+
+            names = list(getattr(resp, "map_names", []))
+            nav_ready = list(getattr(resp, "nav_ready", []))
+            paths = list(getattr(resp, "map_paths", []))
+            created_at = list(getattr(resp, "created_at", []))
+            ori_sizes = list(getattr(resp, "ori_pointcloud_bytes", []))
+            nav_sizes = list(getattr(resp, "nav_pointcloud_bytes", []))
+
+            n = len(names)
+            entries: List[MapEntry] = []
+            for i in range(n):
+                entries.append(
+                    MapEntry(
+                        name=names[i],
+                        nav_ready=bool(nav_ready[i]) if i < len(nav_ready) else False,
+                        path=str(paths[i]) if i < len(paths) else "",
+                        created_at=str(created_at[i]) if i < len(created_at) else "",
+                        ori_pointcloud_bytes=int(ori_sizes[i]) if i < len(ori_sizes) else 0,
+                        nav_pointcloud_bytes=int(nav_sizes[i]) if i < len(nav_sizes) else 0,
+                    )
+                )
+            return entries
+
+        except rospy.ROSException as e:
+            self._show_error("错误", f"无法连接到ListMaps服务:\n{str(e)}", QMessageBox.Critical)
+            return None
+        except Exception as e:
+            self._show_error("错误", f"获取地图列表时发生错误:\n{str(e)}", QMessageBox.Critical)
+            return None
 

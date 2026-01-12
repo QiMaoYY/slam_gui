@@ -216,6 +216,16 @@ class DarkTheme:
             font-weight: 700;
             padding: 0px 10px;
         }
+
+        /* ==================== 数值/文字框统一（解决深浅不一致） ==================== */
+        QLabel#valueBox {
+            background-color: #0b0e14;
+            border: 1px solid rgba(120, 140, 170, 0.18);
+            border-radius: 10px;
+            padding: 8px 10px;
+            color: #e6eaf2;
+            font-weight: 700;
+        }
         """
 
     @staticmethod

@@ -14,7 +14,7 @@ class LogPanel(QWidget):
         super().__init__(parent)
         self.setObjectName("logPanel")
 
-        self._title = QLabel("系统日志（GUI）")
+        self._title = QLabel("系统日志（GUI / SLAM Manager）")
         self._title.setObjectName("sectionTitle")
 
         self._view = QPlainTextEdit()

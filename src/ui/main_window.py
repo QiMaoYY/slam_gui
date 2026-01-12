@@ -30,6 +30,7 @@ from PyQt5.QtWidgets import (
 from ..config.settings import config
 from ..core.ros_manager import ROSServiceManager
 from ..core.server_manager import ServerProcessManager
+from ..core.rosout_listener import SlamManagerRosoutListener
 from ..core.status_thread import StatusUpdateThread
 from ..utils.gui_logging import setup_gui_logger
 from ..utils.system_metrics import CpuUsageSampler, read_mem_percent, read_jetson_gpu_percent
@@ -65,6 +66,13 @@ class SlamMainWindow(QMainWindow):
         self.logger, self._log_signal, self._std_guard = setup_gui_logger(
             self.log_panel.append_line, logger_name="slam_gui", level=logging.INFO, redirect_std=True
         )
+
+        # 订阅slam_manager的ROS日志并输出到右侧log
+        try:
+            self._slam_rosout = SlamManagerRosoutListener(self.log_panel.append_line, node_name_keyword="slam_manager")
+            self.logger.info("已订阅slam_manager日志（/rosout_agg）")
+        except Exception as e:
+            self.logger.warning("订阅slam_manager日志失败：%s", str(e))
 
         # 性能采样
         self._cpu_sampler = CpuUsageSampler()
@@ -243,6 +251,13 @@ class SlamMainWindow(QMainWindow):
         # 恢复stdout/stderr
         if hasattr(self, "_std_guard") and self._std_guard:
             self._std_guard.restore()
+
+        # 取消订阅rosout
+        if hasattr(self, "_slam_rosout") and self._slam_rosout:
+            try:
+                self._slam_rosout.shutdown()
+            except Exception:
+                pass
 
         event.accept()
 

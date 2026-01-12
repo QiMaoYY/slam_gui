@@ -42,7 +42,7 @@ class ServerProcessManager:
                 return os.path.exists(f'/proc/{pid}')
         return False
     
-    def start(self):
+    def start(self, show_terminal: bool = True):
         """
         启动服务端
         
@@ -67,7 +67,11 @@ class ServerProcessManager:
         # 确保脚本有执行权限
         os.chmod(script_path, 0o755)
         
-        # 尝试启动终端
+        # 后台启动（不显示终端）：用交互shell加载~/.bashrc（与桌面终端行为一致）
+        if not show_terminal:
+            return self._start_background(script_path)
+
+        # 显示终端：尝试启动终端窗口
         for terminal in config.TERMINAL_PRIORITY:
             if self._try_start_terminal(terminal, script_path):
                 return True
@@ -80,6 +84,25 @@ class ServerProcessManager:
             QMessageBox.Critical
         )
         return False
+
+    def _start_background(self, script_path: str) -> bool:
+        """后台启动：不打开终端窗口"""
+        try:
+            # bash -i 会读取 ~/.bashrc；-c 执行脚本
+            cmd = ["bash", "-ic", f"{script_path}"]
+            process = subprocess.Popen(
+                cmd,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                start_new_session=True,
+            )
+            with open(self.pid_file, "w") as f:
+                f.write(str(process.pid))
+            rospy.loginfo(f"[ServerManager] 服务端已后台启动 (PID: {process.pid})")
+            return True
+        except Exception as e:
+            self._show_message("错误", f"后台启动服务端失败:\n{str(e)}", QMessageBox.Critical)
+            return False
     
     def stop(self):
         """

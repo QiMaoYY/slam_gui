@@ -19,6 +19,7 @@ from PyQt5.QtWidgets import (
     QLabel,
     QPushButton,
     QFrame,
+    QCheckBox,
 )
 
 from ...core.server_manager import ServerProcessManager
@@ -41,6 +42,9 @@ class SystemStatusPage(QWidget):
         self._btn_start_server.setObjectName("startServerBtn")
         self._btn_stop_server = QPushButton("关闭服务端")
         self._btn_stop_server.setObjectName("stopServerBtn")
+
+        self._chk_show_terminal = QCheckBox("显示终端")
+        self._chk_show_terminal.setChecked(False)  # 默认后台运行
 
         self._sys_info = QLabel("")
         self._sys_info.setWordWrap(True)
@@ -99,6 +103,7 @@ class SystemStatusPage(QWidget):
         btn_row.setSpacing(10)
         btn_row.addWidget(self._btn_start_server)
         btn_row.addWidget(self._btn_stop_server)
+        btn_row.addWidget(self._chk_show_terminal)
         btn_row.addStretch()
         server_layout.addLayout(btn_row)
 
@@ -123,8 +128,11 @@ class SystemStatusPage(QWidget):
         root.addStretch()
 
     def _wire(self):
-        self._btn_start_server.clicked.connect(self._server_manager.start)
+        self._btn_start_server.clicked.connect(self._on_start_server)
         self._btn_stop_server.clicked.connect(self._server_manager.stop)
+
+    def _on_start_server(self):
+        self._server_manager.start(show_terminal=self._chk_show_terminal.isChecked())
 
     @staticmethod
     def _kv(k: str, v_label: QLabel):
@@ -160,5 +168,6 @@ class SystemStatusPage(QWidget):
         # 按钮可用性（简单规则）
         self._btn_start_server.setEnabled(not manager_running)
         self._btn_stop_server.setEnabled(manager_running)
+        self._chk_show_terminal.setEnabled(not manager_running)
 
 

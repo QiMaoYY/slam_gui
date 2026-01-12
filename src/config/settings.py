@@ -41,10 +41,18 @@ class Config:
     WINDOW_TITLE = "Kuavo SLAM 控制中心"
     
     # 窗口尺寸
-    WINDOW_WIDTH = 800
-    WINDOW_HEIGHT = 600
+    WINDOW_WIDTH = 1280
+    WINDOW_HEIGHT = 720
     WINDOW_POS_X = 100
     WINDOW_POS_Y = 100
+
+    # 横屏三栏布局比例（左/中/右）
+    LAYOUT_RATIO_LEFT = 2     # 约 20%
+    LAYOUT_RATIO_CENTER = 5   # 约 50%
+    LAYOUT_RATIO_RIGHT = 3    # 约 30%
+
+    # 底部状态栏高度
+    STATUS_BAR_HEIGHT = 32
     
     # 按钮高度
     BUTTON_HEIGHT_LARGE = 60  # 建图按钮

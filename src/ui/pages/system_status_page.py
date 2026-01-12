@@ -132,7 +132,7 @@ class SystemStatusPage(QWidget):
         self._btn_stop_server.clicked.connect(self._server_manager.stop)
 
     def _on_start_server(self):
-        self._server_manager.start(show_terminal=self._chk_show_terminal.isChecked())
+        self._server_manager.start(show_terminal=self._chk_show_terminal.isChecked(), silent=False)
 
     @staticmethod
     def _kv(k: str, v_label: QLabel):

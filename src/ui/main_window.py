@@ -89,6 +89,9 @@ class SlamMainWindow(QMainWindow):
         self._build_ui()
         self.setStyleSheet(DarkTheme.get_stylesheet())
 
+        # 默认限制：服务端未启动前，只允许访问“系统状态”
+        self._set_page_access(self.server_manager.is_running())
+
         # 状态线程
         self.status_thread = StatusUpdateThread()
         self.status_thread.status_updated.connect(self.on_status_updated)
@@ -99,7 +102,33 @@ class SlamMainWindow(QMainWindow):
         self._metrics_timer.timeout.connect(self._update_metrics)
         self._metrics_timer.start(1000)
 
+        # 打开软件时自动后台启动服务端（默认不显示终端）
+        QTimer.singleShot(200, self._auto_start_server)
+
         self.logger.info("GUI启动完成")
+
+    def _auto_start_server(self):
+        try:
+            ok = self.server_manager.start(show_terminal=False, silent=True)
+            if ok:
+                self.logger.info("已自动后台启动服务端")
+            else:
+                self.logger.warning("自动后台启动服务端失败（请在系统状态页手动启动）")
+        except Exception as e:
+            self.logger.warning("自动启动服务端异常：%s", str(e))
+        finally:
+            self._set_page_access(self.server_manager.is_running())
+
+    def _set_page_access(self, server_running: bool):
+        # 仅当服务端启动后，开放其余页面
+        self._btn_nav.setEnabled(server_running)
+        self._btn_map.setEnabled(server_running)
+        self._btn_task.setEnabled(server_running)
+
+        # 若服务端未启动，强制回到系统状态页
+        if not server_running and self.pages.currentIndex() != 0:
+            self.pages.setCurrentIndex(0)
+            self._btn_status.setChecked(True)
 
     def _build_ui(self):
         root = QWidget()
@@ -222,6 +251,7 @@ class SlamMainWindow(QMainWindow):
         self.current_uptime = int(uptime or 0)
 
         manager_running = bool(self.server_manager.is_running())
+        self._set_page_access(manager_running)
         self.status_bar.set_manager_running(manager_running)
         self.status_bar.set_slam_status(self.current_status)
         self.status_bar.set_uptime(self.current_uptime)
@@ -239,14 +269,28 @@ class SlamMainWindow(QMainWindow):
         msg_box.exec_()
 
     def closeEvent(self, event):
-        # 停止状态线程
-        if hasattr(self, "status_thread"):
-            self.status_thread.stop()
-            self.status_thread.wait(1000)
+        # 先停线程/定时器，避免退出过程中继续调用ROS
+        if hasattr(self, "_metrics_timer") and self._metrics_timer:
+            try:
+                self._metrics_timer.stop()
+            except Exception:
+                pass
 
-        # 清理服务端资源
-        if hasattr(self, "server_manager"):
-            self.server_manager.cleanup()
+        if hasattr(self, "status_thread"):
+            try:
+                self.status_thread.stop()
+                self.status_thread.wait(1000)
+            except Exception:
+                pass
+
+        # 退出前确保服务端关闭（若没关，先关闭）
+        if hasattr(self, "server_manager") and self.server_manager:
+            try:
+                if self.server_manager.is_running():
+                    self.log_panel.append_line("退出：检测到服务端仍在运行，正在关闭...")
+                self.server_manager.stop(silent=True)
+            except Exception:
+                pass
 
         # 恢复stdout/stderr
         if hasattr(self, "_std_guard") and self._std_guard:

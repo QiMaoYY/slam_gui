@@ -29,20 +29,28 @@ class ServerProcessManager:
         self.parent = parent
         self.pid_file = config.SERVER_PID_FILE
         
-    def is_running(self):
+    def is_running(self) -> bool:
         """
         检查服务端是否正在运行
         
         Returns:
             bool: 是否运行中
         """
+        # 优先判断slam_manager真实进程是否存在（最可靠）
+        if self._find_slam_processes():
+            return True
+
+        # 回退：PID文件存在且对应进程还活着（可能是终端进程或后台bash）
         if os.path.exists(self.pid_file):
-            with open(self.pid_file, 'r') as f:
-                pid = f.read().strip()
-                return os.path.exists(f'/proc/{pid}')
+            try:
+                with open(self.pid_file, 'r') as f:
+                    pid = f.read().strip()
+                return bool(pid) and os.path.exists(f'/proc/{pid}')
+            except Exception:
+                return False
         return False
     
-    def start(self, show_terminal: bool = True):
+    def start(self, show_terminal: bool = True, silent: bool = False) -> bool:
         """
         启动服务端
         
@@ -51,17 +59,19 @@ class ServerProcessManager:
         """
         # 检查是否已经启动
         if self.is_running():
-            self._show_message('提示', '服务端已在运行中', QMessageBox.Information)
-            return False
+            if not silent:
+                self._show_message('提示', '服务端已在运行中', QMessageBox.Information)
+            return True
         
         # 检查脚本是否存在
         script_path = config.SLAM_MANAGER_SCRIPT
         if not os.path.exists(script_path):
-            self._show_message(
-                '错误', 
-                f'启动脚本不存在:\n{script_path}', 
-                QMessageBox.Critical
-            )
+            if not silent:
+                self._show_message(
+                    '错误',
+                    f'启动脚本不存在:\n{script_path}',
+                    QMessageBox.Critical
+                )
             return False
         
         # 确保脚本有执行权限
@@ -69,7 +79,7 @@ class ServerProcessManager:
         
         # 后台启动（不显示终端）：用交互shell加载~/.bashrc（与桌面终端行为一致）
         if not show_terminal:
-            return self._start_background(script_path)
+            return self._start_background(script_path, silent=silent)
 
         # 显示终端：尝试启动终端窗口
         for terminal in config.TERMINAL_PRIORITY:
@@ -77,15 +87,16 @@ class ServerProcessManager:
                 return True
         
         # 所有终端都失败
-        self._show_message(
-            '错误', 
-            f'无法启动终端窗口\n'
-            f'尝试的终端: {", ".join(config.TERMINAL_PRIORITY)}', 
-            QMessageBox.Critical
-        )
+        if not silent:
+            self._show_message(
+                '错误',
+                f'无法启动终端窗口\n'
+                f'尝试的终端: {", ".join(config.TERMINAL_PRIORITY)}',
+                QMessageBox.Critical
+            )
         return False
 
-    def _start_background(self, script_path: str) -> bool:
+    def _start_background(self, script_path: str, *, silent: bool = False) -> bool:
         """后台启动：不打开终端窗口"""
         try:
             # bash -i 会读取 ~/.bashrc；-c 执行脚本
@@ -101,10 +112,11 @@ class ServerProcessManager:
             rospy.loginfo(f"[ServerManager] 服务端已后台启动 (PID: {process.pid})")
             return True
         except Exception as e:
-            self._show_message("错误", f"后台启动服务端失败:\n{str(e)}", QMessageBox.Critical)
+            if not silent:
+                self._show_message("错误", f"后台启动服务端失败:\n{str(e)}", QMessageBox.Critical)
             return False
     
-    def stop(self):
+    def stop(self, silent: bool = False) -> bool:
         """
         停止服务端
         
@@ -126,6 +138,16 @@ class ServerProcessManager:
             # 2. 等待进程结束
             if slam_pids:
                 self._wait_processes_exit(slam_pids)
+
+            # 2.1 若仍未退出，强制SIGKILL
+            still_alive = [pid for pid in slam_pids if os.path.exists(f"/proc/{pid}")]
+            if still_alive:
+                rospy.logwarn(f"[ServerManager] slam_manager仍存活，强制终止: {still_alive}")
+                for pid in still_alive:
+                    try:
+                        os.kill(int(pid), signal.SIGKILL)
+                    except Exception:
+                        pass
             
             # 3. 关闭终端窗口
             self._close_terminal()
@@ -134,26 +156,21 @@ class ServerProcessManager:
             return True
             
         except Exception as e:
-            self._show_message(
-                '错误', 
-                f'停止服务端失败:\n{str(e)}', 
-                QMessageBox.Critical
-            )
+            if not silent:
+                self._show_message(
+                    '错误',
+                    f'停止服务端失败:\n{str(e)}',
+                    QMessageBox.Critical
+                )
             return False
     
     def cleanup(self):
         """清理资源（程序退出时调用）"""
-        if os.path.exists(self.pid_file):
-            try:
-                with open(self.pid_file, 'r') as f:
-                    terminal_pid = f.read().strip()
-                
-                if os.path.exists(f'/proc/{terminal_pid}'):
-                    os.kill(int(terminal_pid), signal.SIGTERM)
-                
-                os.remove(self.pid_file)
-            except:
-                pass
+        # 退出时统一走stop，确保slam_manager被关闭
+        try:
+            self.stop(silent=True)
+        except Exception:
+            pass
     
     def _try_start_terminal(self, terminal, script_path):
         """尝试使用指定终端启动"""

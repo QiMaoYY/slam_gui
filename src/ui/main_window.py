@@ -37,7 +37,8 @@ from ..utils.system_metrics import CpuUsageSampler, read_mem_percent, read_jetso
 from .styles import DarkTheme
 from .pages.system_status_page import SystemStatusPage
 from .pages.map_management_page import MapManagementPage
-from .pages.placeholder_page import PlaceholderPage
+from .pages.navigation_management_page import NavigationManagementPage
+from .pages.task_management_page import TaskManagementPage
 from .widgets.status_bar import AppStatusBar
 from .widgets.log_panel import LogPanel
 
@@ -215,8 +216,8 @@ class SlamMainWindow(QMainWindow):
 
         self.page_system = SystemStatusPage(self.server_manager)
         self.page_map = MapManagementPage(self.ros_manager)
-        self.page_nav = PlaceholderPage("导航管理")
-        self.page_task = PlaceholderPage("任务管理")
+        self.page_nav = NavigationManagementPage(self.ros_manager)
+        self.page_task = TaskManagementPage(self.ros_manager)
 
         self.pages.addWidget(self.page_system)  # 0
         self.pages.addWidget(self.page_nav)     # 1

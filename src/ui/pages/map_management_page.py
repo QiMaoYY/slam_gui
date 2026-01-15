@@ -9,9 +9,10 @@
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Optional
+import logging
+import shutil
 
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QPixmap
@@ -76,9 +77,11 @@ class MapManagementPage(QWidget):
         self._combo_maps.setEditable(False)
 
         self._btn_refresh = QPushButton("刷新地图列表")
-        self._btn_gen2d = QPushButton("生成2D地图")
-        self._btn_view2d = QPushButton("查看2D地图")
-        self._btn_edit2d = QPushButton("编辑2D地图")
+        self._btn_all = QPushButton("一键处理")
+        self._btn_pcd2grid = QPushButton("点云转栅格地图")
+        self._btn_edit_grid = QPushButton("编辑栅格地图")
+        self._btn_reset_grid = QPushButton("重置栅格地图")
+        self._btn_reverse_filter = QPushButton("反向过滤点云")
         self._btn_delete = QPushButton("删除该地图")
 
         # 地图详情（选择后显示）
@@ -152,9 +155,11 @@ class MapManagementPage(QWidget):
 
         action_row = QHBoxLayout()
         action_row.setSpacing(10)
-        action_row.addWidget(self._btn_gen2d)
-        action_row.addWidget(self._btn_view2d)
-        action_row.addWidget(self._btn_edit2d)
+        action_row.addWidget(self._btn_all)
+        action_row.addWidget(self._btn_pcd2grid)
+        action_row.addWidget(self._btn_edit_grid)
+        action_row.addWidget(self._btn_reset_grid)
+        action_row.addWidget(self._btn_reverse_filter)
         action_row.addWidget(self._btn_delete)
         action_row.addStretch()
         edit_layout.addLayout(action_row)
@@ -187,12 +192,10 @@ class MapManagementPage(QWidget):
         root.addWidget(edit_card)
         root.addStretch()
 
-        # 先禁用未实现功能按钮（后续你安排再接）
+        # 初始化：无地图选中前禁用操作按钮
         self._btn_refresh.setEnabled(True)
-        self._btn_gen2d.setEnabled(False)   # 预留
-        self._btn_delete.setEnabled(False)  # 预留
-        self._btn_view2d.setEnabled(False)  # 由nav_ready控制
-        self._btn_edit2d.setEnabled(False)  # 由nav_ready控制
+        self._set_process_buttons_enabled(False)
+        self._btn_delete.setEnabled(False)
 
     def _wire(self):
         self._btn_start.clicked.connect(self._on_start_mapping)
@@ -200,6 +203,88 @@ class MapManagementPage(QWidget):
         self._btn_abort.clicked.connect(self._on_abort_mapping)
         self._btn_refresh.clicked.connect(self.refresh_map_list)
         self._combo_maps.currentIndexChanged.connect(self._on_map_selected)
+        self._btn_all.clicked.connect(lambda: self._on_process_map(0))
+        self._btn_pcd2grid.clicked.connect(lambda: self._on_process_map(1))
+        self._btn_edit_grid.clicked.connect(lambda: self._on_process_map(4))
+        self._btn_reset_grid.clicked.connect(lambda: self._on_process_map(2))
+        self._btn_reverse_filter.clicked.connect(lambda: self._on_process_map(3))
+        self._btn_delete.clicked.connect(self._on_delete_map)
+
+    def _set_process_buttons_enabled(self, enabled: bool):
+        self._btn_all.setEnabled(enabled)
+        self._btn_pcd2grid.setEnabled(enabled)
+        self._btn_edit_grid.setEnabled(enabled)
+        self._btn_reset_grid.setEnabled(enabled)
+        self._btn_reverse_filter.setEnabled(enabled)
+
+    def _set_process_buttons_by_nav_ready(self, nav_ready: bool):
+        """
+        按“是否可导航”限制按钮：
+        - 不可导航：仅允许“一键处理(0)”与“删除该地图”
+        - 可导航：允许全部处理按钮与删除
+        """
+        # 选中地图后“一键处理”始终允许
+        self._btn_all.setEnabled(True)
+        self._btn_delete.setEnabled(True)
+
+        # 其它处理按钮：仅可导航地图开放
+        self._btn_pcd2grid.setEnabled(bool(nav_ready))
+        self._btn_edit_grid.setEnabled(bool(nav_ready))
+        self._btn_reset_grid.setEnabled(bool(nav_ready))
+        self._btn_reverse_filter.setEnabled(bool(nav_ready))
+
+    def _current_map_entry(self):
+        name = self._combo_maps.currentText().strip()
+        if not name or name not in self._maps:
+            return None
+        return self._maps[name]
+
+    def _on_process_map(self, mode: int):
+        e = self._current_map_entry()
+        if e is None:
+            return
+        map_name = str(getattr(e, "name", "") or "").strip()
+        if not map_name:
+            return
+
+        # 成功不弹窗；失败由ROSServiceManager弹错误框
+        ok = self._ros.process_map(map_name=map_name, mode=mode)
+        if ok:
+            logging.getLogger("slam_gui").info("已触发地图处理：map=%s, mode=%s", map_name, mode)
+
+    def _on_delete_map(self):
+        e = self._current_map_entry()
+        if e is None:
+            return
+
+        map_name = str(getattr(e, "name", "") or "").strip()
+        map_path = str(getattr(e, "path", "") or "").strip()
+        if not map_name or not map_path:
+            return
+
+        reply = QMessageBox.question(
+            self,
+            "确认删除",
+            f'确定要删除地图 "{map_name}" 吗？\n\n将直接删除目录：\n{map_path}\n\n⚠️ 此操作不可恢复！',
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        if reply != QMessageBox.Yes:
+            return
+
+        try:
+            p = Path(map_path).resolve()
+            # 安全兜底：禁止删除根目录/过短路径
+            if str(p) in ("/", "") or len(str(p)) < 10:
+                raise RuntimeError("地图路径异常，已阻止删除")
+            if not p.exists() or not p.is_dir():
+                raise FileNotFoundError(f"地图目录不存在: {p}")
+
+            shutil.rmtree(str(p))
+            logging.getLogger("slam_gui").warning("已删除地图目录：%s", str(p))
+            self.refresh_map_list()
+        except Exception as ex:
+            QMessageBox.critical(self, "错误", f"删除地图失败：\n{str(ex)}")
 
     def _on_start_mapping(self):
         need_calibration = self._calib.isChecked()
@@ -266,6 +351,9 @@ class MapManagementPage(QWidget):
         return col
 
     def refresh_map_list(self):
+        # 刷新前先记住当前选中的地图名（用于刷新后保持选中）
+        prev_selected = self._combo_maps.currentText().strip()
+
         entries = self._ros.list_maps()
         if entries is None:
             return
@@ -274,15 +362,21 @@ class MapManagementPage(QWidget):
         self._combo_maps.blockSignals(True)
         self._combo_maps.clear()
 
+        selected_index = -1
         for e in entries:
             self._maps[e.name] = e
             self._combo_maps.addItem(e.name)
+            if prev_selected and e.name == prev_selected:
+                selected_index = self._combo_maps.count() - 1
 
         self._combo_maps.blockSignals(False)
 
         if self._combo_maps.count() > 0:
-            self._combo_maps.setCurrentIndex(0)
-            self._on_map_selected(0)
+            # 若刷新后仍能找到之前选中的地图，则保持选中；否则选第一张
+            if selected_index < 0:
+                selected_index = 0
+            self._combo_maps.setCurrentIndex(selected_index)
+            self._on_map_selected(selected_index)
         else:
             self._set_map_detail_none()
 
@@ -292,8 +386,8 @@ class MapManagementPage(QWidget):
         self._lbl_nav_size.setText("--")
         self._preview.setText("无2d预览图")
         self._preview.setPixmap(QPixmap())
-        self._btn_view2d.setEnabled(False)
-        self._btn_edit2d.setEnabled(False)
+        self._set_process_buttons_enabled(False)
+        self._btn_delete.setEnabled(False)
 
     def _on_map_selected(self, idx: int):
         name = self._combo_maps.currentText().strip()
@@ -329,9 +423,8 @@ class MapManagementPage(QWidget):
             self._preview.setText("无2d预览图")
             self._preview.setPixmap(QPixmap())
 
-        # 可导航地图才允许查看/编辑2D
-        self._btn_view2d.setEnabled(nav_ready)
-        self._btn_edit2d.setEnabled(nav_ready)
+        # 不可导航地图：仅允许“一键处理/删除”
+        self._set_process_buttons_by_nav_ready(nav_ready)
 
     def set_mapping_state(self, slam_status: str):
         """

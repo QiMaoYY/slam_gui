@@ -191,3 +191,37 @@ class ROSServiceManager:
             self._show_error("错误", f"获取地图列表时发生错误:\n{str(e)}", QMessageBox.Critical)
             return None
 
+    def process_map(self, map_name: str, mode: int) -> bool:
+        """
+        地图处理（/slam_manager/process_map）
+
+        mode:
+          0 全流程
+          1 点云清理+2D转换（点云转栅格地图）
+          2 编辑2D地图（从init复制一份重新编辑，重置栅格地图）
+          3 智能点云过滤（反向过滤点云）
+          4 继续编辑2D地图（编辑栅格地图）
+        """
+        from slam_controller.srv import ProcessMap, ProcessMapRequest
+
+        try:
+            rospy.wait_for_service(config.SERVICE_PROCESS_MAP, timeout=config.SERVICE_TIMEOUT)
+            srv = rospy.ServiceProxy(config.SERVICE_PROCESS_MAP, ProcessMap)
+
+            req = ProcessMapRequest()
+            req.map_name = (map_name or "").strip()
+            req.mode = int(mode)
+            resp = srv(req)
+
+            if not getattr(resp, "success", False):
+                self._show_error("失败", getattr(resp, "message", "地图处理失败"), QMessageBox.Warning)
+                return False
+            return True
+
+        except rospy.ROSException as e:
+            self._show_error("错误", f"无法连接到ProcessMap服务:\n{str(e)}", QMessageBox.Critical)
+            return False
+        except Exception as e:
+            self._show_error("错误", f"调用ProcessMap服务时发生错误:\n{str(e)}", QMessageBox.Critical)
+            return False
+

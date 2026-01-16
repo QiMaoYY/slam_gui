@@ -259,6 +259,12 @@ class SlamMainWindow(QMainWindow):
 
         self.page_system.set_states(manager_running, self.current_status)
         self.page_map.set_mapping_state(self.current_status)
+        try:
+            # 导航页：用于更新“开始/结束导航”按钮状态
+            if hasattr(self, "page_nav") and hasattr(self.page_nav, "set_slam_state"):
+                self.page_nav.set_slam_state(self.current_status)
+        except Exception:
+            pass
 
     def show_message(self, title: str, message: str, icon=QMessageBox.Information):
         msg_box = QMessageBox(self)

@@ -225,3 +225,53 @@ class ROSServiceManager:
             self._show_error("错误", f"调用ProcessMap服务时发生错误:\n{str(e)}", QMessageBox.Critical)
             return False
 
+    def start_navigation(self, map_name: str, enable_rviz: bool = True, need_calibration: bool = False) -> bool:
+        """
+        启动导航（/slam_manager/start_navigation）
+
+        按“rosservice call”风格调用：srv(map_name=..., enable_rviz=..., need_calibration=...)
+        """
+        try:
+            from slam_controller.srv import StartNavigation
+
+            rospy.wait_for_service(config.SERVICE_START_NAVIGATION, timeout=config.SERVICE_TIMEOUT)
+            srv = rospy.ServiceProxy(config.SERVICE_START_NAVIGATION, StartNavigation)
+
+            resp = srv(
+                map_name=(map_name or "").strip(),
+                enable_rviz=bool(enable_rviz),
+                need_calibration=bool(need_calibration),
+            )
+            if not getattr(resp, "success", False):
+                self._show_error("失败", getattr(resp, "message", "启动导航失败"), QMessageBox.Warning)
+                return False
+            return True
+
+        except rospy.ROSException as e:
+            self._show_error("错误", f"无法连接到StartNavigation服务:\n{str(e)}", QMessageBox.Critical)
+            return False
+        except Exception as e:
+            self._show_error("错误", f"调用StartNavigation服务时发生错误:\n{str(e)}", QMessageBox.Critical)
+            return False
+
+    def stop_navigation(self) -> bool:
+        """停止导航（/slam_manager/stop_navigation）"""
+        try:
+            from slam_controller.srv import StopNavigation
+
+            rospy.wait_for_service(config.SERVICE_STOP_NAVIGATION, timeout=config.SERVICE_TIMEOUT)
+            srv = rospy.ServiceProxy(config.SERVICE_STOP_NAVIGATION, StopNavigation)
+
+            resp = srv()
+            if not getattr(resp, "success", False):
+                self._show_error("失败", getattr(resp, "message", "停止导航失败"), QMessageBox.Warning)
+                return False
+            return True
+
+        except rospy.ROSException as e:
+            self._show_error("错误", f"无法连接到StopNavigation服务:\n{str(e)}", QMessageBox.Critical)
+            return False
+        except Exception as e:
+            self._show_error("错误", f"调用StopNavigation服务时发生错误:\n{str(e)}", QMessageBox.Critical)
+            return False
+

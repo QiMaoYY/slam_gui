@@ -12,7 +12,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Dict
 
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtGui import QPixmap
 from PyQt5.QtWidgets import (
     QFrame,
@@ -51,6 +51,8 @@ def _bytes_to_mb_str(b: int) -> str:
 
 
 class MapSelectorPanel(QFrame):
+    map_changed = pyqtSignal(object)  # MapEntry | None
+
     def __init__(self, ros_manager: ROSServiceManager, title: str = "地图选择", parent=None):
         super().__init__(parent)
         self.setObjectName("card")
@@ -78,6 +80,21 @@ class MapSelectorPanel(QFrame):
 
         self._build_ui(title)
         self._wire()
+
+    def current_map_name(self) -> str:
+        return self._combo_maps.currentText().strip()
+
+    def current_entry(self):
+        name = self.current_map_name()
+        if not name or name not in self._maps:
+            return None
+        return self._maps[name]
+
+    def current_nav_ready(self) -> bool:
+        e = self.current_entry()
+        if e is None:
+            return False
+        return bool(getattr(e, "nav_ready", False))
 
     def _build_ui(self, title: str):
         layout = QVBoxLayout()
@@ -166,6 +183,7 @@ class MapSelectorPanel(QFrame):
         self._lbl_nav_size.setText("--")
         self._preview.setText("无2d预览图")
         self._preview.setPixmap(QPixmap())
+        self.map_changed.emit(None)
 
     def _on_map_selected(self, idx: int):
         name = self._combo_maps.currentText().strip()
@@ -198,3 +216,5 @@ class MapSelectorPanel(QFrame):
         else:
             self._preview.setText("无2d预览图")
             self._preview.setPixmap(QPixmap())
+
+        self.map_changed.emit(e)

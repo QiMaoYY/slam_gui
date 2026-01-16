@@ -31,6 +31,8 @@ class Config:
     SERVICE_GET_STATUS = "/slam_manager/get_status"
     SERVICE_LIST_MAPS = "/slam_manager/list_maps"
     SERVICE_PROCESS_MAP = "/slam_manager/process_map"
+    SERVICE_START_NAVIGATION = "/slam_manager/start_navigation"
+    SERVICE_STOP_NAVIGATION = "/slam_manager/stop_navigation"
     
     # 服务超时时间（秒）
     SERVICE_TIMEOUT = 2.0

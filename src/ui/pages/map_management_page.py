@@ -319,15 +319,7 @@ class MapManagementPage(QWidget):
             QMessageBox.warning(self, "错误", f"地图名称包含非法字符: {map_name}")
             return
 
-        reply = QMessageBox.question(
-            self,
-            "确认保存",
-            f'确定要停止建图并保存为 "{map_name}" 吗？',
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.Yes,
-        )
-        if reply == QMessageBox.Yes:
-            self._ros.stop_mapping(save_map=True, map_name=map_name)
+        self._ros.stop_mapping(save_map=True, map_name=map_name)
 
     def _on_abort_mapping(self):
         reply = QMessageBox.question(

@@ -261,7 +261,6 @@ class ROSServiceManager:
 
             rospy.wait_for_service(config.SERVICE_STOP_NAVIGATION, timeout=config.SERVICE_TIMEOUT)
             srv = rospy.ServiceProxy(config.SERVICE_STOP_NAVIGATION, StopNavigation)
-
             resp = srv()
             if not getattr(resp, "success", False):
                 self._show_error("失败", getattr(resp, "message", "停止导航失败"), QMessageBox.Warning)
@@ -274,4 +273,3 @@ class ROSServiceManager:
         except Exception as e:
             self._show_error("错误", f"调用StopNavigation服务时发生错误:\n{str(e)}", QMessageBox.Critical)
             return False
-

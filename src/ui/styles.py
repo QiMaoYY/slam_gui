@@ -41,6 +41,12 @@ class DarkTheme:
             color: rgba(214, 219, 227, 0.65);
         }
 
+        QLabel#listTitle {
+            color: rgba(214, 219, 227, 0.70);
+            font-size: 11px;
+            padding: 0px;
+        }
+
         /* ==================== 左侧菜单 ==================== */
         #sidebar {
             background-color: #10141d;
@@ -94,6 +100,12 @@ class DarkTheme:
             padding: 10px;
             font-family: 'Consolas', 'Monaco', 'DejaVu Sans Mono', monospace;
             font-size: 12px;
+        }
+
+        /* ==================== 中间内容滚动区 ==================== */
+        QScrollArea#centerScroll {
+            background-color: #0f1115;
+            border: none;
         }
 
         /* 滚动条（简约） */
@@ -185,6 +197,11 @@ class DarkTheme:
             border-color: rgba(200, 150, 60, 0.35);
         }
 
+        QPushButton#compactActionBtn {
+            padding: 6px 8px;
+            font-size: 12px;
+        }
+
         /* ==================== 复选框 ==================== */
         QCheckBox {
             color: rgba(214, 219, 227, 0.85);
@@ -225,6 +242,15 @@ class DarkTheme:
             padding: 8px 10px;
             color: #e6eaf2;
             font-weight: 700;
+        }
+
+        QPlainTextEdit#compactInfoBox {
+            background-color: #0b0e14;
+            border: 1px solid rgba(120, 140, 170, 0.18);
+            border-radius: 8px;
+            padding: 4px 6px;
+            color: #e6eaf2;
+            font-size: 11px;
         }
         """
 

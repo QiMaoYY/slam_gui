@@ -225,6 +225,62 @@ class ROSServiceManager:
             self._show_error("错误", f"调用ProcessMap服务时发生错误:\n{str(e)}", QMessageBox.Critical)
             return False
 
+    def get_map_tasks(self, map_name: str) -> Optional[str]:
+        """
+        获取地图任务文件内容（/slam_manager/get_map_tasks）
+
+        Returns:
+            tasks_yaml or None
+        """
+        from slam_controller.srv import GetMapTasks, GetMapTasksRequest
+
+        try:
+            rospy.wait_for_service(config.SERVICE_GET_MAP_TASKS, timeout=config.SERVICE_TIMEOUT)
+            srv = rospy.ServiceProxy(config.SERVICE_GET_MAP_TASKS, GetMapTasks)
+
+            req = GetMapTasksRequest()
+            req.map_name = (map_name or "").strip()
+            resp = srv(req)
+
+            if not getattr(resp, "success", False):
+                self._show_error("失败", getattr(resp, "message", "获取任务信息失败"), QMessageBox.Warning)
+                return None
+            return str(getattr(resp, "tasks_yaml", "") or "")
+
+        except rospy.ROSException as e:
+            self._show_error("错误", f"无法连接到GetMapTasks服务:\n{str(e)}", QMessageBox.Critical)
+            return None
+        except Exception as e:
+            self._show_error("错误", f"调用GetMapTasks服务时发生错误:\n{str(e)}", QMessageBox.Critical)
+            return None
+
+    def set_map_tasks(self, map_name: str, tasks_yaml: str) -> bool:
+        """
+        写入地图任务文件内容（/slam_manager/set_map_tasks）
+        """
+        from slam_controller.srv import SetMapTasks, SetMapTasksRequest
+
+        try:
+            rospy.wait_for_service(config.SERVICE_SET_MAP_TASKS, timeout=config.SERVICE_TIMEOUT)
+            srv = rospy.ServiceProxy(config.SERVICE_SET_MAP_TASKS, SetMapTasks)
+
+            req = SetMapTasksRequest()
+            req.map_name = (map_name or "").strip()
+            req.tasks_yaml = str(tasks_yaml or "")
+            resp = srv(req)
+
+            if not getattr(resp, "success", False):
+                self._show_error("失败", getattr(resp, "message", "保存任务信息失败"), QMessageBox.Warning)
+                return False
+            return True
+
+        except rospy.ROSException as e:
+            self._show_error("错误", f"无法连接到SetMapTasks服务:\n{str(e)}", QMessageBox.Critical)
+            return False
+        except Exception as e:
+            self._show_error("错误", f"调用SetMapTasks服务时发生错误:\n{str(e)}", QMessageBox.Critical)
+            return False
+
     def start_navigation(self, map_name: str, enable_rviz: bool = True, need_calibration: bool = False) -> bool:
         """
         启动导航（/slam_manager/start_navigation）

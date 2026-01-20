@@ -25,6 +25,8 @@ from PyQt5.QtWidgets import (
     QStackedWidget,
     QMessageBox,
     QSplitter,
+    QScrollArea,
+    QFrame,
 )
 
 from ..config.settings import config
@@ -219,13 +221,22 @@ class SlamMainWindow(QMainWindow):
         self.page_nav = NavigationManagementPage(self.ros_manager)
         self.page_task = TaskManagementPage(self.ros_manager)
 
-        self.pages.addWidget(self.page_system)  # 0
-        self.pages.addWidget(self.page_nav)     # 1
-        self.pages.addWidget(self.page_map)     # 2
-        self.pages.addWidget(self.page_task)    # 3
+        self.pages.addWidget(self._wrap_scroll(self.page_system))  # 0
+        self.pages.addWidget(self._wrap_scroll(self.page_nav))     # 1
+        self.pages.addWidget(self._wrap_scroll(self.page_map))     # 2
+        self.pages.addWidget(self._wrap_scroll(self.page_task))    # 3
 
         layout.addWidget(self.pages, 1)
         return container
+
+    @staticmethod
+    def _wrap_scroll(widget: QWidget) -> QScrollArea:
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
+        scroll.setObjectName("centerScroll")
+        scroll.setWidget(widget)
+        return scroll
 
     def _on_nav_clicked(self, idx: int):
         self.pages.setCurrentIndex(idx)

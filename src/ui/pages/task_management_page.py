@@ -73,8 +73,8 @@ class TaskManagementPage(QWidget):
         # 任务属性（紧凑文本框）
         self._group_info = self._make_info_box()
         self._point_info = self._make_info_box()
-        self._group_info.setFixedHeight(84)
-        self._point_info.setFixedHeight(104)
+        self._group_info.setFixedHeight(100)
+        self._point_info.setFixedHeight(100)
 
         self._build_ui()
         self._wire()
@@ -109,50 +109,49 @@ class TaskManagementPage(QWidget):
         top_row.addWidget(self._btn_save)
         top_row.addStretch()
         task_layout.addLayout(top_row)
+        task_layout.addSpacing(15)
 
         list_row = QHBoxLayout()
-        list_row.setSpacing(14)
+        list_row.setSpacing(8)
 
         # 任务组列表
         group_col = QVBoxLayout()
-        group_col.setSpacing(6)
+        group_col.setSpacing(10)
         group_col.setContentsMargins(0, 0, 0, 0)
         group_title = self._make_list_title("任务组列表")
         group_col.addWidget(group_title)
-        self._list_groups.setFixedHeight(200)
+        self._list_groups.setFixedHeight(100)
         group_col.addWidget(self._list_groups, 1)
-        list_row.addLayout(group_col, 2)
+        list_row.addLayout(group_col, 5)
 
         # 任务点列表
         point_col = QVBoxLayout()
-        point_col.setSpacing(6)
+        point_col.setSpacing(10)
         point_col.setContentsMargins(0, 0, 0, 0)
         point_title = self._make_list_title("任务点列表")
         point_col.addWidget(point_title)
-        self._list_points.setFixedHeight(200)
+        self._list_points.setFixedHeight(100)
         point_col.addWidget(self._list_points, 1)
-        list_row.addLayout(point_col, 2)
+        list_row.addLayout(point_col, 5)
 
-        # 属性区（上：任务组属性，下：任务点属性）
-        attr_col = QVBoxLayout()
-        attr_col.setSpacing(10)
-
-        group_attr_title = QLabel("任务组属性")
+        # 任务组属性
+        group_attr_col = QVBoxLayout()
+        group_attr_col.setSpacing(10)
+        group_attr_title = self._make_list_title("任务组属性")
         group_attr_title.setObjectName("muted")
-        attr_col.addWidget(group_attr_title)
-
-        attr_col.addWidget(self._group_info)
-
-        attr_col.addSpacing(8)
-
-        point_attr_title = QLabel("任务点属性")
+        group_attr_col.addWidget(group_attr_title)
+        group_attr_col.addWidget(self._group_info)
+        list_row.addLayout(group_attr_col, 4)
+        
+        # 任务点属性
+        point_attr_col = QVBoxLayout()
+        point_attr_col.setSpacing(10)
+        point_attr_title = self._make_list_title("任务点属性")
         point_attr_title.setObjectName("muted")
-        attr_col.addWidget(point_attr_title)
+        point_attr_col.addWidget(point_attr_title)
+        point_attr_col.addWidget(self._point_info)
+        list_row.addLayout(point_attr_col, 4)
 
-        attr_col.addWidget(self._point_info)
-        attr_col.addStretch()
-
-        list_row.addLayout(attr_col, 3)
         task_layout.addLayout(list_row)
 
         root.addWidget(task_card)
@@ -735,8 +734,8 @@ class TaskManagementPage(QWidget):
         text = (
             f"ID: {gid}\n"
             f"名称: {name}\n"
-            f"描述: {desc}\n"
-            f"任务点数量: {point_count}"
+            f"任务点数量: {point_count}\n"
+            f"描述: {desc}"
         )
         self._group_info.setPlainText(text)
 

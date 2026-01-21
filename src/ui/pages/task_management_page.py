@@ -586,7 +586,8 @@ class TaskManagementPage(QWidget):
         for p in self._current_points:
             if isinstance(p, dict):
                 pid = p.get("id", "--")
-                name = p.get("name", "未命名")
+                name = p.get("name", "")
+                name = "未命名" if not str(name).strip() else str(name)
             else:
                 pid = "--"
                 name = "未命名"

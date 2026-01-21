@@ -66,6 +66,14 @@ class TaskManagementPage(QWidget):
         self._btn_group_rename = None
         self._btn_group_desc = None
 
+        # 任务点操作按钮（在构建编辑区时初始化）
+        self._btn_point_new = None
+        self._btn_point_delete = None
+        self._btn_point_up = None
+        self._btn_point_down = None
+        self._btn_point_rename = None
+        self._btn_point_pose = None
+
         # 列表
         self._list_groups = QListWidget()
         self._list_points = QListWidget()
@@ -243,17 +251,19 @@ class TaskManagementPage(QWidget):
         grid.setHorizontalSpacing(8)
         grid.setVerticalSpacing(8)
 
-        items = [
-            ("新建任务点", 0, 0),
-            ("删除任务点", 0, 1),
-            ("排序上移", 0, 2),
-            ("任务点重命名", 1, 0),
-            ("位姿编辑", 1, 1),
-            ("排序下移", 1, 2),
-        ]
-        for text, r, c in items:
-            b = self._make_compact_btn(text)
-            grid.addWidget(b, r, c)
+        self._btn_point_new = self._make_compact_btn("新建任务点")
+        self._btn_point_delete = self._make_compact_btn("删除任务点")
+        self._btn_point_up = self._make_compact_btn("排序上移")
+        self._btn_point_rename = self._make_compact_btn("任务点重命名")
+        self._btn_point_pose = self._make_compact_btn("位姿编辑")
+        self._btn_point_down = self._make_compact_btn("排序下移")
+
+        grid.addWidget(self._btn_point_new, 0, 0)
+        grid.addWidget(self._btn_point_delete, 0, 1)
+        grid.addWidget(self._btn_point_up, 0, 2)
+        grid.addWidget(self._btn_point_rename, 1, 0)
+        grid.addWidget(self._btn_point_pose, 1, 1)
+        grid.addWidget(self._btn_point_down, 1, 2)
         for i in range(3):
             grid.setColumnStretch(i, 1)
         layout.addLayout(grid)
@@ -284,6 +294,19 @@ class TaskManagementPage(QWidget):
         if self._btn_group_desc:
             self._btn_group_desc.clicked.connect(self._on_group_edit_desc)
 
+        if self._btn_point_new:
+            self._btn_point_new.clicked.connect(self._on_point_add)
+        if self._btn_point_delete:
+            self._btn_point_delete.clicked.connect(self._on_point_delete)
+        if self._btn_point_up:
+            self._btn_point_up.clicked.connect(self._on_point_move_up)
+        if self._btn_point_down:
+            self._btn_point_down.clicked.connect(self._on_point_move_down)
+        if self._btn_point_rename:
+            self._btn_point_rename.clicked.connect(self._on_point_rename)
+        if self._btn_point_pose:
+            self._btn_point_pose.clicked.connect(self._on_point_edit_pose)
+
         self._list_groups.currentRowChanged.connect(self._on_group_selected)
         self._list_points.currentRowChanged.connect(self._on_point_selected)
 
@@ -291,6 +314,7 @@ class TaskManagementPage(QWidget):
         self._btn_fetch_reset.setEnabled(fetch)
         self._btn_save.setEnabled(save)
         self._update_group_action_state()
+        self._update_point_action_state()
 
     def _update_group_action_state(self):
         has_tasks = bool(self._tasks_loaded)
@@ -309,6 +333,26 @@ class TaskManagementPage(QWidget):
             self._btn_group_up.setEnabled(has_sel and row > 0)
         if self._btn_group_down:
             self._btn_group_down.setEnabled(has_sel and row < len(self._task_groups) - 1)
+
+    def _update_point_action_state(self):
+        has_tasks = bool(self._tasks_loaded)
+        group_row = self._list_groups.currentRow()
+        has_group = has_tasks and 0 <= group_row < len(self._task_groups)
+        point_row = self._list_points.currentRow()
+        has_point = has_group and 0 <= point_row < len(self._current_points)
+
+        if self._btn_point_new:
+            self._btn_point_new.setEnabled(has_group)
+        if self._btn_point_delete:
+            self._btn_point_delete.setEnabled(has_point)
+        if self._btn_point_rename:
+            self._btn_point_rename.setEnabled(has_point)
+        if self._btn_point_pose:
+            self._btn_point_pose.setEnabled(has_point)
+        if self._btn_point_up:
+            self._btn_point_up.setEnabled(has_point and point_row > 0)
+        if self._btn_point_down:
+            self._btn_point_down.setEnabled(has_point and point_row < len(self._current_points) - 1)
 
     def _mark_dirty(self):
         self._dirty = True
@@ -350,8 +394,16 @@ class TaskManagementPage(QWidget):
             points = g.get("points", [])
             if not isinstance(points, list):
                 points = []
-            g["points"] = points
-            g["point_count"] = len(points)
+            norm_points: List[dict] = []
+            for p_idx, p in enumerate(points):
+                if not isinstance(p, dict):
+                    p = {}
+                p["id"] = p_idx
+                if "name" not in p:
+                    p["name"] = ""
+                norm_points.append(p)
+            g["points"] = norm_points
+            g["point_count"] = len(norm_points)
             groups.append(g)
         self._task_groups = groups
 
@@ -525,6 +577,9 @@ class TaskManagementPage(QWidget):
         self._update_group_action_state()
 
     def _load_point_list(self, points: List[dict]):
+        self._refresh_point_list(points, select_index=-1)
+
+    def _refresh_point_list(self, points: List[dict], select_index: int = -1):
         self._current_points = points if isinstance(points, list) else []
         self._list_points.blockSignals(True)
         self._list_points.clear()
@@ -538,14 +593,20 @@ class TaskManagementPage(QWidget):
             self._list_points.addItem(f"[{pid}] {name}")
         self._list_points.blockSignals(False)
 
-        self._list_points.setCurrentRow(-1)
-        self._set_point_attrs(None)
+        if select_index is None or select_index < 0 or select_index >= len(self._current_points):
+            self._list_points.setCurrentRow(-1)
+            self._set_point_attrs(None)
+        else:
+            self._list_points.setCurrentRow(select_index)
+            self._on_point_selected(select_index)
+        self._update_point_action_state()
 
     def _on_group_selected(self, row: int):
         if row < 0 or row >= len(self._task_groups):
             self._set_group_attrs(None)
             self._load_point_list([])
             self._update_group_action_state()
+            self._update_point_action_state()
             return
 
         group = self._task_groups[row]
@@ -560,10 +621,12 @@ class TaskManagementPage(QWidget):
             points = []
         self._load_point_list(points)
         self._update_group_action_state()
+        self._update_point_action_state()
 
     def _on_point_selected(self, row: int):
         if row < 0 or row >= len(self._current_points):
             self._set_point_attrs(None)
+            self._update_point_action_state()
             return
 
         point = self._current_points[row]
@@ -572,6 +635,189 @@ class TaskManagementPage(QWidget):
             return
 
         self._set_point_attrs(point)
+        self._update_point_action_state()
+
+    def _on_point_add(self):
+        group_idx = self._list_groups.currentRow()
+        if group_idx < 0 or group_idx >= len(self._task_groups):
+            QMessageBox.warning(self, "提示", "请先选择任务组")
+            return
+
+        mode = self._choose_pose_input_method("新建任务点")
+        if mode is None:
+            return
+        if mode == "map":
+            QMessageBox.information(self, "提示", "地图选点功能待接入")
+            return
+
+        pose = self._input_pose_manual(defaults=(0.0, 0.0, 0.0))
+        if pose is None:
+            return
+        x, y, theta = pose
+        if not self._validate_pose_range(x, y, theta):
+            QMessageBox.warning(self, "错误", "位姿超出地图范围（接口预留）")
+            return
+
+        group = self._task_groups[group_idx]
+        points = group.get("points", [])
+        if not isinstance(points, list):
+            points = []
+        points.append(
+            {
+                "id": len(points),
+                "x": float(x),
+                "y": float(y),
+                "theta": float(theta),
+                "name": "",
+            }
+        )
+        group["points"] = points
+        self._normalize_task_groups()
+        if not self._sync_tasks_yaml():
+            return
+        self._mark_dirty()
+
+        group = self._task_groups[group_idx]
+        self._set_group_attrs(group)
+        new_index = len(group.get("points", [])) - 1
+        self._refresh_point_list(group.get("points", []), select_index=new_index)
+
+    def _on_point_delete(self):
+        group_idx = self._list_groups.currentRow()
+        row = self._list_points.currentRow()
+        if group_idx < 0 or group_idx >= len(self._task_groups):
+            return
+        points = self._task_groups[group_idx].get("points", [])
+        if not isinstance(points, list) or row < 0 or row >= len(points):
+            return
+
+        reply = QMessageBox.question(
+            self,
+            "确认删除",
+            "确定要删除该任务点吗？",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        if reply != QMessageBox.Yes:
+            return
+
+        points.pop(row)
+        self._normalize_task_groups()
+        if not self._sync_tasks_yaml():
+            return
+        self._mark_dirty()
+
+        group = self._task_groups[group_idx]
+        self._set_group_attrs(group)
+        next_index = min(row, len(group.get("points", [])) - 1)
+        self._refresh_point_list(group.get("points", []), select_index=next_index)
+
+    def _on_point_move_up(self):
+        group_idx = self._list_groups.currentRow()
+        row = self._list_points.currentRow()
+        if group_idx < 0 or group_idx >= len(self._task_groups):
+            return
+        points = self._task_groups[group_idx].get("points", [])
+        if not isinstance(points, list) or row <= 0 or row >= len(points):
+            return
+
+        points[row - 1], points[row] = points[row], points[row - 1]
+        self._normalize_task_groups()
+        if not self._sync_tasks_yaml():
+            return
+        self._mark_dirty()
+
+        group = self._task_groups[group_idx]
+        self._set_group_attrs(group)
+        self._refresh_point_list(group.get("points", []), select_index=row - 1)
+
+    def _on_point_move_down(self):
+        group_idx = self._list_groups.currentRow()
+        row = self._list_points.currentRow()
+        if group_idx < 0 or group_idx >= len(self._task_groups):
+            return
+        points = self._task_groups[group_idx].get("points", [])
+        if not isinstance(points, list) or row < 0 or row >= len(points) - 1:
+            return
+
+        points[row + 1], points[row] = points[row], points[row + 1]
+        self._normalize_task_groups()
+        if not self._sync_tasks_yaml():
+            return
+        self._mark_dirty()
+
+        group = self._task_groups[group_idx]
+        self._set_group_attrs(group)
+        self._refresh_point_list(group.get("points", []), select_index=row + 1)
+
+    def _on_point_rename(self):
+        group_idx = self._list_groups.currentRow()
+        row = self._list_points.currentRow()
+        if group_idx < 0 or group_idx >= len(self._task_groups):
+            return
+        points = self._task_groups[group_idx].get("points", [])
+        if not isinstance(points, list) or row < 0 or row >= len(points):
+            return
+
+        current_name = str(points[row].get("name", ""))
+        name, ok = QInputDialog.getText(self, "任务点重命名", "请输入任务点名称（可为空）：", text=current_name)
+        if not ok:
+            return
+        name = str(name or "")
+        if name == current_name:
+            return
+
+        points[row]["name"] = name
+        self._normalize_task_groups()
+        if not self._sync_tasks_yaml():
+            return
+        self._mark_dirty()
+
+        group = self._task_groups[group_idx]
+        self._set_group_attrs(group)
+        self._refresh_point_list(group.get("points", []), select_index=row)
+
+    def _on_point_edit_pose(self):
+        group_idx = self._list_groups.currentRow()
+        row = self._list_points.currentRow()
+        if group_idx < 0 or group_idx >= len(self._task_groups):
+            return
+        points = self._task_groups[group_idx].get("points", [])
+        if not isinstance(points, list) or row < 0 or row >= len(points):
+            return
+
+        mode = self._choose_pose_input_method("编辑位姿")
+        if mode is None:
+            return
+        if mode == "map":
+            QMessageBox.information(self, "提示", "地图选点功能待接入")
+            return
+
+        p = points[row]
+        defaults = (
+            float(p.get("x", 0.0) or 0.0),
+            float(p.get("y", 0.0) or 0.0),
+            float(p.get("theta", 0.0) or 0.0),
+        )
+        pose = self._input_pose_manual(defaults=defaults)
+        if pose is None:
+            return
+        x, y, theta = pose
+        if not self._validate_pose_range(x, y, theta):
+            QMessageBox.warning(self, "错误", "位姿超出地图范围（接口预留）")
+            return
+
+        p["x"] = float(x)
+        p["y"] = float(y)
+        p["theta"] = float(theta)
+        self._normalize_task_groups()
+        if not self._sync_tasks_yaml():
+            return
+        self._mark_dirty()
+
+        group = self._task_groups[group_idx]
+        self._set_group_attrs(group)
+        self._refresh_point_list(group.get("points", []), select_index=row)
 
     def _on_group_add(self):
         if not self._tasks_loaded:
@@ -716,6 +962,7 @@ class TaskManagementPage(QWidget):
         self._set_group_attrs(None)
         self._set_point_attrs(None)
         self._update_group_action_state()
+        self._update_point_action_state()
 
     def _set_group_attrs(self, group: Optional[dict]):
         if not group:
@@ -758,6 +1005,39 @@ class TaskManagementPage(QWidget):
             f"Theta: {theta}"
         )
         self._point_info.setPlainText(text)
+
+    def _choose_pose_input_method(self, title: str) -> Optional[str]:
+        msg = QMessageBox(self)
+        msg.setWindowTitle(title)
+        msg.setText("请选择位姿输入方式：")
+        btn_map = msg.addButton("地图选点", QMessageBox.ActionRole)
+        btn_manual = msg.addButton("手动输入", QMessageBox.ActionRole)
+        msg.addButton("取消", QMessageBox.RejectRole)
+        msg.exec_()
+
+        clicked = msg.clickedButton()
+        if clicked == btn_map:
+            return "map"
+        if clicked == btn_manual:
+            return "manual"
+        return None
+
+    def _input_pose_manual(self, defaults=(0.0, 0.0, 0.0)) -> Optional[tuple]:
+        x0, y0, t0 = defaults
+        x, ok = QInputDialog.getDouble(self, "手动输入", "X:", float(x0), -1e9, 1e9, 4)
+        if not ok:
+            return None
+        y, ok = QInputDialog.getDouble(self, "手动输入", "Y:", float(y0), -1e9, 1e9, 4)
+        if not ok:
+            return None
+        theta, ok = QInputDialog.getDouble(self, "手动输入", "Theta:", float(t0), -1e9, 1e9, 4)
+        if not ok:
+            return None
+        return x, y, theta
+
+    def _validate_pose_range(self, x: float, y: float, theta: float) -> bool:
+        # 预留地图范围校验接口（后续使用地图范围进行约束）
+        return True
 
     @staticmethod
     def _make_info_box() -> QPlainTextEdit:

@@ -26,6 +26,7 @@ from PyQt5.QtWidgets import (
     QPlainTextEdit,
     QSizePolicy,
     QGridLayout,
+    QInputDialog,
 )
 
 from ...core.ros_manager import ROSServiceManager
@@ -42,16 +43,28 @@ class TaskManagementPage(QWidget):
         self._tasks_data: dict = {}
         self._task_groups: List[dict] = []
         self._current_points: List[dict] = []
+        self._tasks_loaded = False
+        self._dirty = False
+        self._ignore_map_change = False
+        self._last_map_index = -1
 
         # 地图选择
         self._combo_maps = QComboBox()
         self._combo_maps.setEditable(False)
+        self._combo_maps.setFixedWidth(220)
         self._btn_refresh_maps = QPushButton("刷新地图列表")
 
         # 总控按钮
-        self._btn_fetch = QPushButton("获取任务信息")
-        self._btn_reset = QPushButton("重置任务信息")
+        self._btn_fetch_reset = QPushButton("获取/重置任务信息")
         self._btn_save = QPushButton("保存任务信息")
+
+        # 任务组操作按钮（在构建编辑区时初始化）
+        self._btn_group_new = None
+        self._btn_group_delete = None
+        self._btn_group_up = None
+        self._btn_group_down = None
+        self._btn_group_rename = None
+        self._btn_group_desc = None
 
         # 列表
         self._list_groups = QListWidget()
@@ -65,7 +78,7 @@ class TaskManagementPage(QWidget):
 
         self._build_ui()
         self._wire()
-        self._set_buttons_enabled(False, False, False)
+        self._set_buttons_enabled(False, False)
         self._set_group_attrs(None)
         self._set_point_attrs(None)
 
@@ -74,28 +87,6 @@ class TaskManagementPage(QWidget):
         root.setSpacing(12)
         root.setContentsMargins(16, 16, 16, 16)
         self.setLayout(root)
-
-        # 地图选择区（简化）
-        map_card = QFrame()
-        map_card.setObjectName("card")
-        map_layout = QVBoxLayout()
-        map_layout.setContentsMargins(16, 16, 16, 16)
-        map_layout.setSpacing(10)
-        map_card.setLayout(map_layout)
-
-        title = QLabel("任务地图选择")
-        title.setObjectName("sectionTitle")
-        map_layout.addWidget(title)
-
-        row = QHBoxLayout()
-        row.setSpacing(10)
-        row.addWidget(QLabel("选择地图："))
-        row.addWidget(self._combo_maps, 1)
-        row.addWidget(self._btn_refresh_maps)
-        row.addStretch()
-        map_layout.addLayout(row)
-
-        root.addWidget(map_card)
 
         # 任务信息区
         task_card = QFrame()
@@ -109,13 +100,15 @@ class TaskManagementPage(QWidget):
         title2.setObjectName("sectionTitle")
         task_layout.addWidget(title2)
 
-        btn_row = QHBoxLayout()
-        btn_row.setSpacing(10)
-        btn_row.addWidget(self._btn_fetch)
-        btn_row.addWidget(self._btn_reset)
-        btn_row.addWidget(self._btn_save)
-        btn_row.addStretch()
-        task_layout.addLayout(btn_row)
+        top_row = QHBoxLayout()
+        top_row.setSpacing(10)
+        top_row.addWidget(QLabel("选择地图："))
+        top_row.addWidget(self._combo_maps)
+        top_row.addWidget(self._btn_refresh_maps)
+        top_row.addWidget(self._btn_fetch_reset)
+        top_row.addWidget(self._btn_save)
+        top_row.addStretch()
+        task_layout.addLayout(top_row)
 
         list_row = QHBoxLayout()
         list_row.setSpacing(14)
@@ -128,7 +121,7 @@ class TaskManagementPage(QWidget):
         group_col.addWidget(group_title)
         self._list_groups.setFixedHeight(200)
         group_col.addWidget(self._list_groups, 1)
-        list_row.addLayout(group_col, 1)
+        list_row.addLayout(group_col, 2)
 
         # 任务点列表
         point_col = QVBoxLayout()
@@ -138,7 +131,7 @@ class TaskManagementPage(QWidget):
         point_col.addWidget(point_title)
         self._list_points.setFixedHeight(200)
         point_col.addWidget(self._list_points, 1)
-        list_row.addLayout(point_col, 1)
+        list_row.addLayout(point_col, 2)
 
         # 属性区（上：任务组属性，下：任务点属性）
         attr_col = QVBoxLayout()
@@ -159,7 +152,7 @@ class TaskManagementPage(QWidget):
         attr_col.addWidget(self._point_info)
         attr_col.addStretch()
 
-        list_row.addLayout(attr_col, 1)
+        list_row.addLayout(attr_col, 3)
         task_layout.addLayout(list_row)
 
         root.addWidget(task_card)
@@ -212,17 +205,19 @@ class TaskManagementPage(QWidget):
         grid.setHorizontalSpacing(8)
         grid.setVerticalSpacing(8)
 
-        items = [
-            ("新建任务组", 0, 0),
-            ("删除任务组", 0, 1),
-            ("排序上移", 0, 2),
-            ("任务组重命名", 1, 0),
-            ("编辑描述", 1, 1),
-            ("排序下移", 1, 2),
-        ]
-        for text, r, c in items:
-            b = self._make_compact_btn(text)
-            grid.addWidget(b, r, c)
+        self._btn_group_new = self._make_compact_btn("新建任务组")
+        self._btn_group_delete = self._make_compact_btn("删除任务组")
+        self._btn_group_up = self._make_compact_btn("排序上移")
+        self._btn_group_rename = self._make_compact_btn("任务组重命名")
+        self._btn_group_desc = self._make_compact_btn("编辑描述")
+        self._btn_group_down = self._make_compact_btn("排序下移")
+
+        grid.addWidget(self._btn_group_new, 0, 0)
+        grid.addWidget(self._btn_group_delete, 0, 1)
+        grid.addWidget(self._btn_group_up, 0, 2)
+        grid.addWidget(self._btn_group_rename, 1, 0)
+        grid.addWidget(self._btn_group_desc, 1, 1)
+        grid.addWidget(self._btn_group_down, 1, 2)
         for i in range(3):
             grid.setColumnStretch(i, 1)
         layout.addLayout(grid)
@@ -274,17 +269,120 @@ class TaskManagementPage(QWidget):
         self._btn_refresh_maps.clicked.connect(self.refresh_map_list)
         self._combo_maps.currentIndexChanged.connect(self._on_map_changed)
 
-        self._btn_fetch.clicked.connect(self._on_fetch_tasks)
-        self._btn_reset.clicked.connect(self._on_reset_tasks)
+        self._btn_fetch_reset.clicked.connect(self._on_fetch_tasks)
         self._btn_save.clicked.connect(self._on_save_tasks)
+
+        if self._btn_group_new:
+            self._btn_group_new.clicked.connect(self._on_group_add)
+        if self._btn_group_delete:
+            self._btn_group_delete.clicked.connect(self._on_group_delete)
+        if self._btn_group_up:
+            self._btn_group_up.clicked.connect(self._on_group_move_up)
+        if self._btn_group_down:
+            self._btn_group_down.clicked.connect(self._on_group_move_down)
+        if self._btn_group_rename:
+            self._btn_group_rename.clicked.connect(self._on_group_rename)
+        if self._btn_group_desc:
+            self._btn_group_desc.clicked.connect(self._on_group_edit_desc)
 
         self._list_groups.currentRowChanged.connect(self._on_group_selected)
         self._list_points.currentRowChanged.connect(self._on_point_selected)
 
-    def _set_buttons_enabled(self, fetch: bool, reset: bool, save: bool):
-        self._btn_fetch.setEnabled(fetch)
-        self._btn_reset.setEnabled(reset)
+    def _set_buttons_enabled(self, fetch: bool, save: bool):
+        self._btn_fetch_reset.setEnabled(fetch)
         self._btn_save.setEnabled(save)
+        self._update_group_action_state()
+
+    def _update_group_action_state(self):
+        has_tasks = bool(self._tasks_loaded)
+        row = self._list_groups.currentRow()
+        has_sel = has_tasks and 0 <= row < len(self._task_groups)
+
+        if self._btn_group_new:
+            self._btn_group_new.setEnabled(has_tasks)
+        if self._btn_group_delete:
+            self._btn_group_delete.setEnabled(has_sel)
+        if self._btn_group_rename:
+            self._btn_group_rename.setEnabled(has_sel)
+        if self._btn_group_desc:
+            self._btn_group_desc.setEnabled(has_sel)
+        if self._btn_group_up:
+            self._btn_group_up.setEnabled(has_sel and row > 0)
+        if self._btn_group_down:
+            self._btn_group_down.setEnabled(has_sel and row < len(self._task_groups) - 1)
+
+    def _mark_dirty(self):
+        self._dirty = True
+
+    def _confirm_discard_changes(self, action: str) -> bool:
+        if not self._dirty:
+            return True
+        reply = QMessageBox.question(
+            self,
+            "确认操作",
+            f"任务信息已修改，{action}会丢失未保存的改动，是否继续？",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        return reply == QMessageBox.Yes
+
+    def _confirm_save_changes(self) -> bool:
+        if not self._dirty:
+            return True
+        reply = QMessageBox.question(
+            self,
+            "确认保存",
+            "任务信息已修改，确定要保存吗？",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.Yes,
+        )
+        return reply == QMessageBox.Yes
+
+    def _normalize_task_groups(self):
+        groups: List[dict] = []
+        for idx, g in enumerate(self._task_groups):
+            if not isinstance(g, dict):
+                g = {}
+            g["id"] = idx
+            if "name" not in g:
+                g["name"] = "未命名"
+            if "description" not in g:
+                g["description"] = ""
+            points = g.get("points", [])
+            if not isinstance(points, list):
+                points = []
+            g["points"] = points
+            g["point_count"] = len(points)
+            groups.append(g)
+        self._task_groups = groups
+
+    def _sync_tasks_yaml(self) -> bool:
+        try:
+            import yaml
+        except Exception as e:
+            QMessageBox.critical(self, "错误", f"缺少YAML解析库，无法同步任务信息：\n{str(e)}")
+            return False
+
+        if not isinstance(self._tasks_data, dict):
+            self._tasks_data = {}
+        self._tasks_data["task_groups"] = self._task_groups
+        try:
+            self._tasks_yaml = yaml.safe_dump(self._tasks_data, allow_unicode=True, sort_keys=False)
+            return True
+        except Exception as e:
+            QMessageBox.critical(self, "错误", f"生成任务信息失败：\n{str(e)}")
+            return False
+
+    def _validate_group_name(self, name: str, exclude_index: Optional[int] = None) -> Optional[str]:
+        name = (name or "").strip()
+        if not name:
+            return "任务组名称不能为空"
+        for i, g in enumerate(self._task_groups):
+            if exclude_index is not None and i == exclude_index:
+                continue
+            if str(g.get("name", "")).strip() == name:
+                return f"任务组名称重复：{name}"
+        return None
 
     def _current_map_name(self) -> str:
         return self._combo_maps.currentText().strip()
@@ -317,14 +415,26 @@ class TaskManagementPage(QWidget):
             self._combo_maps.setCurrentIndex(selected_index)
             self._on_map_changed(selected_index)
         else:
-            self._set_buttons_enabled(False, False, False)
+            self._set_buttons_enabled(False, False)
             self._clear_task_views()
 
     def _on_map_changed(self, idx: int):
+        if self._ignore_map_change:
+            return
+        if not self._confirm_discard_changes("切换地图"):
+            if self._last_map_index >= 0:
+                self._ignore_map_change = True
+                self._combo_maps.setCurrentIndex(self._last_map_index)
+                self._ignore_map_change = False
+            return
+
+        self._last_map_index = idx
         has_map = bool(self._current_map_name())
-        self._set_buttons_enabled(has_map, False, False)
+        self._set_buttons_enabled(has_map, False)
         self._tasks_yaml = ""
         self._tasks_data = {}
+        self._tasks_loaded = False
+        self._dirty = False
         self._clear_task_views()
 
     def _on_fetch_tasks(self):
@@ -332,6 +442,9 @@ class TaskManagementPage(QWidget):
         if not map_name:
             QMessageBox.warning(self, "提示", "请先选择地图")
             return
+        if self._tasks_loaded and self._dirty:
+            if not self._confirm_discard_changes("获取/重置任务信息"):
+                return
 
         tasks_yaml = self._ros.get_map_tasks(map_name)
         if tasks_yaml is None:
@@ -343,12 +456,12 @@ class TaskManagementPage(QWidget):
             return
 
         self._tasks_data = data
-        self._load_group_list(data)
-        self._set_buttons_enabled(True, True, True)
-
-    def _on_reset_tasks(self):
-        # 重新从服务端读取
-        self._on_fetch_tasks()
+        self._task_groups = list(data.get("task_groups", []) or [])
+        self._normalize_task_groups()
+        self._refresh_group_list(select_index=-1)
+        self._tasks_loaded = True
+        self._dirty = False
+        self._set_buttons_enabled(True, True)
 
     def _on_save_tasks(self):
         map_name = self._current_map_name()
@@ -358,8 +471,12 @@ class TaskManagementPage(QWidget):
         if not self._tasks_yaml:
             QMessageBox.warning(self, "提示", "尚未获取任务信息")
             return
+        if not self._confirm_save_changes():
+            return
 
-        self._ros.set_map_tasks(map_name, self._tasks_yaml)
+        ok = self._ros.set_map_tasks(map_name, self._tasks_yaml)
+        if ok:
+            self._dirty = False
 
     def _parse_tasks_yaml(self, tasks_yaml: str) -> Optional[dict]:
         try:
@@ -383,9 +500,13 @@ class TaskManagementPage(QWidget):
             groups = []
 
         self._task_groups = groups
+        self._normalize_task_groups()
+        self._refresh_group_list(select_index=-1)
+
+    def _refresh_group_list(self, select_index: int = -1):
         self._list_groups.blockSignals(True)
         self._list_groups.clear()
-        for g in groups:
+        for g in self._task_groups:
             if isinstance(g, dict):
                 gid = g.get("id", "--")
                 name = g.get("name", "未命名")
@@ -395,9 +516,14 @@ class TaskManagementPage(QWidget):
             self._list_groups.addItem(f"[{gid}] {name}")
         self._list_groups.blockSignals(False)
 
-        self._list_groups.setCurrentRow(-1)
-        self._set_group_attrs(None)
-        self._load_point_list([])
+        if select_index is None or select_index < 0 or select_index >= len(self._task_groups):
+            self._list_groups.setCurrentRow(-1)
+            self._set_group_attrs(None)
+            self._load_point_list([])
+        else:
+            self._list_groups.setCurrentRow(select_index)
+            self._on_group_selected(select_index)
+        self._update_group_action_state()
 
     def _load_point_list(self, points: List[dict]):
         self._current_points = points if isinstance(points, list) else []
@@ -420,6 +546,7 @@ class TaskManagementPage(QWidget):
         if row < 0 or row >= len(self._task_groups):
             self._set_group_attrs(None)
             self._load_point_list([])
+            self._update_group_action_state()
             return
 
         group = self._task_groups[row]
@@ -433,6 +560,7 @@ class TaskManagementPage(QWidget):
         if not isinstance(points, list):
             points = []
         self._load_point_list(points)
+        self._update_group_action_state()
 
     def _on_point_selected(self, row: int):
         if row < 0 or row >= len(self._current_points):
@@ -446,6 +574,137 @@ class TaskManagementPage(QWidget):
 
         self._set_point_attrs(point)
 
+    def _on_group_add(self):
+        if not self._tasks_loaded:
+            QMessageBox.warning(self, "提示", "请先获取任务信息")
+            return
+
+        name, ok = QInputDialog.getText(self, "新建任务组", "请输入任务组名称：")
+        if not ok:
+            return
+        name = (name or "").strip()
+        err = self._validate_group_name(name)
+        if err:
+            QMessageBox.warning(self, "错误", err)
+            return
+
+        new_group = {
+            "id": len(self._task_groups),
+            "name": name,
+            "description": "",
+            "point_count": 0,
+            "points": [],
+        }
+        self._task_groups.append(new_group)
+        self._normalize_task_groups()
+        if not self._sync_tasks_yaml():
+            return
+        self._mark_dirty()
+
+        new_index = len(self._task_groups) - 1
+        self._refresh_group_list(select_index=new_index)
+
+    def _on_group_delete(self):
+        row = self._list_groups.currentRow()
+        if row < 0 or row >= len(self._task_groups):
+            return
+
+        name = str(self._task_groups[row].get("name", ""))
+        reply = QMessageBox.question(
+            self,
+            "确认删除",
+            f'确定要删除任务组 "{name}" 吗？',
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        if reply != QMessageBox.Yes:
+            return
+
+        self._task_groups.pop(row)
+        self._normalize_task_groups()
+        if not self._sync_tasks_yaml():
+            return
+        self._mark_dirty()
+
+        next_index = min(row, len(self._task_groups) - 1)
+        self._refresh_group_list(select_index=next_index)
+
+    def _on_group_move_up(self):
+        row = self._list_groups.currentRow()
+        if row <= 0 or row >= len(self._task_groups):
+            return
+
+        self._task_groups[row - 1], self._task_groups[row] = (
+            self._task_groups[row],
+            self._task_groups[row - 1],
+        )
+        self._normalize_task_groups()
+        if not self._sync_tasks_yaml():
+            return
+        self._mark_dirty()
+        self._refresh_group_list(select_index=row - 1)
+
+    def _on_group_move_down(self):
+        row = self._list_groups.currentRow()
+        if row < 0 or row >= len(self._task_groups) - 1:
+            return
+
+        self._task_groups[row + 1], self._task_groups[row] = (
+            self._task_groups[row],
+            self._task_groups[row + 1],
+        )
+        self._normalize_task_groups()
+        if not self._sync_tasks_yaml():
+            return
+        self._mark_dirty()
+        self._refresh_group_list(select_index=row + 1)
+
+    def _on_group_rename(self):
+        row = self._list_groups.currentRow()
+        if row < 0 or row >= len(self._task_groups):
+            return
+
+        current_name = str(self._task_groups[row].get("name", ""))
+        name, ok = QInputDialog.getText(self, "任务组重命名", "请输入新的任务组名称：", text=current_name)
+        if not ok:
+            return
+        name = (name or "").strip()
+        if name == current_name:
+            return
+
+        err = self._validate_group_name(name, exclude_index=row)
+        if err:
+            QMessageBox.warning(self, "错误", err)
+            return
+
+        self._task_groups[row]["name"] = name
+        self._normalize_task_groups()
+        if not self._sync_tasks_yaml():
+            return
+        self._mark_dirty()
+        self._refresh_group_list(select_index=row)
+
+    def _on_group_edit_desc(self):
+        row = self._list_groups.currentRow()
+        if row < 0 or row >= len(self._task_groups):
+            return
+
+        current_desc = str(self._task_groups[row].get("description", ""))
+        desc, ok = QInputDialog.getText(self, "编辑描述", "请输入任务组描述（最多100字）：", text=current_desc)
+        if not ok:
+            return
+        desc = (desc or "").strip()
+        if len(desc) > 100:
+            QMessageBox.warning(self, "错误", "描述长度不能超过100字")
+            return
+
+        self._task_groups[row]["description"] = desc
+        self._normalize_task_groups()
+        if not self._sync_tasks_yaml():
+            return
+        self._mark_dirty()
+        self._refresh_group_list(select_index=row)
+
     def _clear_task_views(self):
         self._list_groups.blockSignals(True)
         self._list_groups.clear()
@@ -457,6 +716,7 @@ class TaskManagementPage(QWidget):
 
         self._set_group_attrs(None)
         self._set_point_attrs(None)
+        self._update_group_action_state()
 
     def _set_group_attrs(self, group: Optional[dict]):
         if not group:
